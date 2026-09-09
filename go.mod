@@ -5,7 +5,7 @@ go 1.24.0
 require (
 	github.com/creack/pty v1.1.24
 	github.com/gorilla/websocket v1.5.3
-	github.com/samber/lo v1.49.1
+	github.com/samber/lo v1.53.0
 	github.com/wailsapp/wails/v2 v2.11.0
 	github.com/wailsapp/wails/v3 v3.0.0-alpha.49
 	go.uber.org/zap v1.27.1
