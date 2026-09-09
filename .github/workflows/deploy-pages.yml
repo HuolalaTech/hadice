@@ -43,7 +43,7 @@ jobs:
         run: npm run docs:build
 
       - name: Configure Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
       - name: Upload docs/web artifact
         uses: actions/upload-pages-artifact@v3
