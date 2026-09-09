@@ -8,7 +8,7 @@ require (
 	github.com/samber/lo v1.49.1
 	github.com/wailsapp/wails/v2 v2.11.0
 	github.com/wailsapp/wails/v3 v3.0.0-alpha.49
-	go.uber.org/zap v1.27.1
+	go.uber.org/zap v1.28.0
 	google.golang.org/grpc v1.80.0
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
