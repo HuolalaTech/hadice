@@ -1,0 +1,26 @@
+Hadice
+Copyright 2026 深圳依时货拉拉科技有限公司
+
+This product is licensed under the Apache License, Version 2.0.
+See the LICENSE file in the project root.
+
+This product redistributes third-party native binaries (adb, hdc, scrcpy,
+FFmpeg/SDL runtime libraries, restool, uitest_agent, and related tools).
+Full component attribution, copyright holders, and license references for
+those binaries are maintained in:
+
+    assets/NOTICE
+
+When packaging release builds, `assets/NOTICE` is copied into the application
+bundle as `THIRD_PARTY_NOTICE` (alongside this NOTICE and LICENSE) so end
+users of the distributed app receive the same attribution.
+
+Software Bill of Materials (SBOM)
+---------------------------------
+- Native redistributed tools: see `assets/NOTICE` (manual inventory).
+- Go module dependencies: regenerate with
+  `go list -m -json all > docs/sbom-go-modules.json` (optional local artifact;
+  not required to be committed).
+- Frontend npm dependencies: regenerate with
+  `npm --prefix frontend sbom` or your preferred CycloneDX/SPDX tooling when
+  publishing a formal release SBOM.

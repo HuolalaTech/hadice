@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=Hadice
+Comment=安卓&鸿蒙调试工具
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/HarmonyHadice %u
+Terminal=false
+Type=Application
+Icon=HarmonyHadice
+Categories=Utility;
+StartupWMClass=HarmonyHadice
+
+ 

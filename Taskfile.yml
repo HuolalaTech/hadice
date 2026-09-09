@@ -1,0 +1,206 @@
+version: '3'
+
+includes:
+  common: ./build/Taskfile.yml
+  windows: ./build/windows/Taskfile.yml
+  darwin: ./build/darwin/Taskfile.yml
+
+vars:
+  APP_NAME: "Hadice"
+  APP_VERSION:
+    sh: grep -E 'version:.*[0-9]+\.[0-9]+\.[0-9]+' build/config.yml | head -1 | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)"/\1/'
+  BIN_DIR: "bin"
+  DIST_DIR: "dist"
+  VITE_PORT: '{{.WAILS_VITE_PORT | default 5173}}'
+
+tasks:
+  build:agent:
+    summary: Builds Android JVMTI network agent (.so) and helper DEX
+    desc: |
+      Requires Android NDK (ANDROID_NDK_HOME or ANDROID_HOME) and JDK (JAVA_HOME).
+      Outputs:
+        - agent/include/helper_dex.h
+        - agent/build/arm64-v8a/libnetwork_agent.so
+        - agent/build/armeabi-v7a/libnetwork_agent.so
+    cmds:
+      - bash ./agent/build.sh
+
+  build:
+    summary: Builds the application
+    cmds:
+      - task: build:agent
+      - task: "{{OS}}:build"
+
+  package:
+    summary: Packages a production build of the application
+    cmds:
+      - task: build:agent
+      - task: "{{OS}}:package"
+
+  run:
+    summary: Runs the application
+    cmds:
+      - task: "{{OS}}:run"
+
+  dev:
+    summary: Runs the application in development mode
+    desc: |
+      Builds the Android JVMTI agent first (needed for Android network capture),
+      then starts Wails dev mode. Agent is loaded from agent/build/<abi>/ at runtime.
+    cmds:
+      - task: build:agent
+      - wails3 dev -config ./build/config.yml -port {{.VITE_PORT}}
+
+  setup:docker:
+    summary: Builds Docker image for cross-compilation (~800MB download)
+    cmds:
+      - task: common:setup:docker
+
+  # Cross-platform build tasks (output to dist/)
+  build:cross:
+    summary: Builds for all target platforms and architectures
+    cmds:
+      - task: build:agent
+      - task: build:macos:arm64
+      - task: build:macos:amd64
+      - task: build:windows:amd64
+      - echo 'Cross-platform build completed. Artifacts organized in {{.DIST_DIR}}/'
+
+  build:macos:arm64:
+    summary: Builds for macOS ARM64 (Apple Silicon)
+    cmds:
+      - task: build:agent
+      - task: darwin:build
+        vars:
+          ARCH: arm64
+          OUTPUT: '{{.DIST_DIR}}/macos-arm64/{{.APP_NAME}}'
+
+  build:macos:amd64:
+    summary: Builds for macOS AMD64 (Intel)
+    cmds:
+      - task: build:agent
+      - task: darwin:build
+        vars:
+          ARCH: amd64
+          OUTPUT: '{{.DIST_DIR}}/macos-amd64/{{.APP_NAME}}'
+
+  build:windows:amd64:
+    summary: Builds for Windows AMD64
+    cmds:
+      - task: build:agent
+      - task: windows:build
+        vars:
+          ARCH: amd64
+          OUTPUT: '{{.DIST_DIR}}/windows-amd64/{{.APP_NAME}}.exe'
+
+  # Packaging tasks (creates .app bundles and DMGs)
+  package:cross:
+    summary: Packages for all target platforms and architectures
+    cmds:
+      - task: build:agent
+      - task: package:macos:arm64
+      - task: package:macos:amd64
+      - task: package:windows:amd64
+      - echo 'Cross-platform packaging completed. Artifacts organized in {{.DIST_DIR}}/'
+
+  package:macos:arm64:
+    summary: Packages macOS ARM64 application with DMG
+    cmds:
+      - task: build:agent
+      - mkdir -p {{.DIST_DIR}}/macos-arm64/{{.APP_NAME}}.app/Contents/{MacOS,Resources}
+      - cp build/darwin/icons.icns {{.DIST_DIR}}/macos-arm64/{{.APP_NAME}}.app/Contents/Resources
+      - cp {{.DIST_DIR}}/macos-arm64/{{.APP_NAME}} {{.DIST_DIR}}/macos-arm64/{{.APP_NAME}}.app/Contents/MacOS
+      - cp build/darwin/Info.plist {{.DIST_DIR}}/macos-arm64/{{.APP_NAME}}.app/Contents
+      - 'if [ -d assets/darwin/arm64/bin ]; then mkdir -p {{.DIST_DIR}}/macos-arm64/{{.APP_NAME}}.app/Contents/Resources/bin && cp -r assets/darwin/arm64/bin/* {{.DIST_DIR}}/macos-arm64/{{.APP_NAME}}.app/Contents/Resources/bin/; fi'
+      - |
+        for abi in arm64-v8a armeabi-v7a; do
+          mkdir -p "{{.DIST_DIR}}/macos-arm64/{{.APP_NAME}}.app/Contents/Resources/agent/$abi"
+          cp "agent/build/$abi/libnetwork_agent.so" "{{.DIST_DIR}}/macos-arm64/{{.APP_NAME}}.app/Contents/Resources/agent/$abi/"
+        done
+        RESOURCES="{{.DIST_DIR}}/macos-arm64/{{.APP_NAME}}.app/Contents/Resources"
+        if [ -f NOTICE ]; then cp NOTICE "$RESOURCES/NOTICE"; fi
+        if [ -f assets/NOTICE ]; then cp assets/NOTICE "$RESOURCES/THIRD_PARTY_NOTICE"; fi
+        if [ -f LICENSE ]; then cp LICENSE "$RESOURCES/LICENSE"; fi
+      - |
+        TMP_DIR=$(mktemp -d)
+        DMG_TMP_DIR="$TMP_DIR/dmg"
+        mkdir -p "$DMG_TMP_DIR"
+        cp -R {{.DIST_DIR}}/macos-arm64/{{.APP_NAME}}.app "$DMG_TMP_DIR/"
+        ln -s /Applications "$DMG_TMP_DIR/Applications"
+        DMG_FILENAME="{{.APP_NAME}}-mac-arm64-v{{.APP_VERSION}}.dmg"
+        hdiutil create \
+          -volname "{{.APP_NAME}}" \
+          -srcfolder "$DMG_TMP_DIR" \
+          -ov \
+          -format UDZO \
+          -imagekey zlib-level=9 \
+          "{{.DIST_DIR}}/macos-arm64/$DMG_FILENAME"
+        rm -rf "$TMP_DIR"
+        echo "Created DMG: {{.DIST_DIR}}/macos-arm64/$DMG_FILENAME"
+
+  package:macos:amd64:
+    summary: Packages macOS AMD64 application with DMG
+    cmds:
+      - task: build:agent
+      - mkdir -p {{.DIST_DIR}}/macos-amd64/{{.APP_NAME}}.app/Contents/{MacOS,Resources}
+      - cp build/darwin/icons.icns {{.DIST_DIR}}/macos-amd64/{{.APP_NAME}}.app/Contents/Resources
+      - cp {{.DIST_DIR}}/macos-amd64/{{.APP_NAME}} {{.DIST_DIR}}/macos-amd64/{{.APP_NAME}}.app/Contents/MacOS
+      - cp build/darwin/Info.plist {{.DIST_DIR}}/macos-amd64/{{.APP_NAME}}.app/Contents
+      - 'if [ -d assets/darwin/amd64/bin ]; then mkdir -p {{.DIST_DIR}}/macos-amd64/{{.APP_NAME}}.app/Contents/Resources/bin && cp -r assets/darwin/amd64/bin/* {{.DIST_DIR}}/macos-amd64/{{.APP_NAME}}.app/Contents/Resources/bin/; fi'
+      - |
+        for abi in arm64-v8a armeabi-v7a; do
+          mkdir -p "{{.DIST_DIR}}/macos-amd64/{{.APP_NAME}}.app/Contents/Resources/agent/$abi"
+          cp "agent/build/$abi/libnetwork_agent.so" "{{.DIST_DIR}}/macos-amd64/{{.APP_NAME}}.app/Contents/Resources/agent/$abi/"
+        done
+        RESOURCES="{{.DIST_DIR}}/macos-amd64/{{.APP_NAME}}.app/Contents/Resources"
+        if [ -f NOTICE ]; then cp NOTICE "$RESOURCES/NOTICE"; fi
+        if [ -f assets/NOTICE ]; then cp assets/NOTICE "$RESOURCES/THIRD_PARTY_NOTICE"; fi
+        if [ -f LICENSE ]; then cp LICENSE "$RESOURCES/LICENSE"; fi
+      - |
+        TMP_DIR=$(mktemp -d)
+        DMG_TMP_DIR="$TMP_DIR/dmg"
+        mkdir -p "$DMG_TMP_DIR"
+        cp -R {{.DIST_DIR}}/macos-amd64/{{.APP_NAME}}.app "$DMG_TMP_DIR/"
+        ln -s /Applications "$DMG_TMP_DIR/Applications"
+        DMG_FILENAME="{{.APP_NAME}}-mac-amd64-v{{.APP_VERSION}}.dmg"
+        hdiutil create \
+          -volname "{{.APP_NAME}}" \
+          -srcfolder "$DMG_TMP_DIR" \
+          -ov \
+          -format UDZO \
+          -imagekey zlib-level=9 \
+          "{{.DIST_DIR}}/macos-amd64/$DMG_FILENAME"
+        rm -rf "$TMP_DIR"
+        echo "Created DMG: {{.DIST_DIR}}/macos-amd64/$DMG_FILENAME"
+
+  package:windows:amd64:
+    summary: Packages Windows AMD64 application with NSIS installer
+    cmds:
+      - task: build:agent
+      - task: windows:create:nsis:installer
+        vars:
+          BIN_DIR: '{{.DIST_DIR}}/windows-amd64'
+          ARCH: amd64
+          NSIS_OUTFILE: '../../../{{.DIST_DIR}}/windows-amd64/{{.APP_NAME}}-windows-amd64-v{{.APP_VERSION}}.exe'
+
+  gen:version:
+    summary: Generates version file from build/config.yml
+    cmds:
+      - task: common:generate:version
+
+  gen:cienv:
+    summary: Bakes `.env.ci` fields into backend/cienv_generated.go (for packaging; file itself is never shipped)
+    cmds:
+      - task: common:generate:cienv
+
+  clean:
+    summary: Cleans build artifacts
+    cmds:
+      - rm -rf {{.BIN_DIR}}/*.app {{.BIN_DIR}}/*.dmg {{.BIN_DIR}}/{{.APP_NAME}}* 2>/dev/null || true
+      - rm -rf agent/build agent/include/helper_dex.h
+      - echo "Build artifacts cleaned"
+
+  clean:dist:
+    summary: Cleans the dist directory
+    cmds:
+      - rm -rf {{.DIST_DIR}}

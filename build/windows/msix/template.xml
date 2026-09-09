@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<MsixPackagingToolTemplate
+    xmlns="http://schemas.microsoft.com/msix/packaging/msixpackagingtool/template/2022">
+    <Settings
+        AllowTelemetry="false"
+        ApplyACLsToPackageFiles="true"
+        GenerateCommandLineFile="true"
+        AllowPromptForPassword="false">
+    </Settings>
+    <Installer
+        Path="HarmonyHadice"
+        Arguments=""
+        InstallLocation="C:\Program Files\Haivo\Harmony Hadice">
+    </Installer>
+    <PackageInformation
+        PackageName="Harmony Hadice"
+        PackageDisplayName="Harmony Hadice"
+        PublisherName="CN=Haivo"
+        PublisherDisplayName="Haivo"
+        Version="1.2.0.0"
+        PackageDescription="HarmonyOS Device Testing and Debugging Tool">
+        <Capabilities>
+            <Capability Name="runFullTrust" />
+            
+        </Capabilities>
+        <Applications>
+            <Application
+                Id="com.haivo.hadice"
+                Description="HarmonyOS Device Testing and Debugging Tool"
+                DisplayName="Harmony Hadice"
+                ExecutableName="HarmonyHadice"
+                EntryPoint="Windows.FullTrustApplication">
+                
+            </Application>
+        </Applications>
+        <Resources>
+            <Resource Language="en-us" />
+        </Resources>
+        <Dependencies>
+            <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.19041.0" />
+        </Dependencies>
+        <Properties>
+            <Framework>false</Framework>
+            <DisplayName>Harmony Hadice</DisplayName>
+            <PublisherDisplayName>Haivo</PublisherDisplayName>
+            <Description>HarmonyOS Device Testing and Debugging Tool</Description>
+            <Logo>Assets\AppIcon.png</Logo>
+        </Properties>
+    </PackageInformation>
+    <SaveLocation PackagePath="HarmonyHadice.msix" />
+    <PackageIntegrity>
+        <CertificatePath></CertificatePath>
+    </PackageIntegrity>
+</MsixPackagingToolTemplate>

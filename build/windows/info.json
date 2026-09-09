@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "1.2.0"
+	},
+	"info": {
+		"0000": {
+			"ProductVersion": "1.2.0",
+			"CompanyName": "huolala",
+			"FileDescription": "安卓&鸿蒙调试工具",
+			"LegalCopyright": "© 2026, Haivo",
+			"ProductName": "Hadice",
+			"Comments": "安卓&鸿蒙调试工具"
+		}
+	}
+}

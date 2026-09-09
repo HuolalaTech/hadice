@@ -1,0 +1,140 @@
+Third-Party Notices
+===================
+
+This directory redistributes third-party native tool binaries used by Hadice at
+runtime. Hadice itself is licensed under the Apache License, Version 2.0.
+The components listed below remain under their respective licenses. This NOTICE
+file is for attribution and compliance information only and does not modify
+those licenses.
+
+Paths below are relative to `assets/{os}/{arch}/bin/`.
+
+
+-------------------------------------------------------------------------------
+1. scrcpy
+-------------------------------------------------------------------------------
+
+Component:  scrcpy, scrcpy-server
+Version:    3.3.4 (as bundled)
+Paths:      scrcpy/scrcpy, scrcpy/scrcpy-server, scrcpy/scrcpy.exe,
+            scrcpy/scrcpy.1, and related launcher scripts under scrcpy/
+Source:     https://github.com/Genymobile/scrcpy
+Copyright:  Copyright (C) Genymobile and contributors
+License:    Apache License, Version 2.0
+            https://github.com/Genymobile/scrcpy/blob/master/LICENSE
+
+
+-------------------------------------------------------------------------------
+2. FFmpeg (Windows runtime libraries bundled with scrcpy)
+-------------------------------------------------------------------------------
+
+Component:  libavcodec, libavformat, libavutil, libswresample
+Version:    ABI 61 / 59 / 5 (filenames: avcodec-61.dll, avformat-61.dll,
+            avutil-59.dll, swresample-5.dll)
+Paths:      windows/amd64/bin/scrcpy/avcodec-61.dll
+            windows/amd64/bin/scrcpy/avformat-61.dll
+            windows/amd64/bin/scrcpy/avutil-59.dll
+            windows/amd64/bin/scrcpy/swresample-5.dll
+Source:     https://ffmpeg.org/
+License:    LGPL v2.1 or later (typical scrcpy Windows release build)
+            https://www.ffmpeg.org/legal.html
+
+LGPL note: These libraries are redistributed as dynamically linked shared
+objects. Corresponding FFmpeg source code may be obtained from the upstream
+project. If you require the exact corresponding source for the binaries
+bundled here, please open an issue against the Hadice repository.
+
+
+-------------------------------------------------------------------------------
+3. SDL2 (Windows runtime library bundled with scrcpy)
+-------------------------------------------------------------------------------
+
+Component:  Simple DirectMedia Layer (SDL2)
+Version:    2.32.x (as linked by bundled scrcpy)
+Path:       windows/amd64/bin/scrcpy/SDL2.dll
+Source:     https://www.libsdl.org/
+Copyright:  Copyright (C) Sam Lantinga and contributors
+License:    zlib License
+            https://github.com/libsdl-org/SDL/blob/main/LICENSE.txt
+
+
+-------------------------------------------------------------------------------
+4. Android Debug Bridge (adb) and Android Asset Packaging Tool (aapt)
+-------------------------------------------------------------------------------
+
+Component:  adb, aapt
+Version:    adb 1.0.41 / platform-tools 36.0.2 (as bundled);
+            aapt v0.2 (build id as printed by the binary)
+Paths:      adb/adb, adb/adb.exe, aapt/aapt
+Source:     Android SDK Platform-Tools / Build-Tools
+            https://developer.android.com/tools/releases/platform-tools
+Copyright:  Copyright (C) The Android Open Source Project and Google LLC
+License:    Android SDK License
+            https://developer.android.com/studio/terms
+
+These tools are provided for device debugging and APK inspection.
+Redistribution is subject to the Android SDK License terms. Trademark and
+branding rights in "Android" remain with Google LLC.
+
+
+-------------------------------------------------------------------------------
+5. HarmonyOS / OpenHarmony Device Connector (hdc) and libusb_shared
+-------------------------------------------------------------------------------
+
+Component:  hdc, libusb_shared
+Version:    hdc 3.2.0b (as reported by `hdc -v`)
+Paths:      hdc/hdc, hdc/hdc.exe,
+            hdc/libusb_shared.dylib, hdc/libusb_shared.dll
+Source:     Huawei / OpenHarmony DevEco / OpenHarmony SDK tooling
+Copyright:  Copyright (c) Huawei Device Co., Ltd. and contributors
+            (as indicated by upstream SDK materials)
+License:    Distributed as part of the OpenHarmony / DevEco tooling.
+            See the license texts shipped with the corresponding SDK release
+            (commonly Apache License, Version 2.0 for OpenHarmony components).
+            https://gitee.com/openharmony
+            https://developer.huawei.com/consumer/cn/deveco-studio/
+
+`libusb_shared` is a USB support library shipped alongside hdc by the
+upstream SDK packaging.
+
+
+-------------------------------------------------------------------------------
+6. restool (HarmonyOS / OpenHarmony resource tool)
+-------------------------------------------------------------------------------
+
+Component:  restool / RestoolV2
+Paths:      restool, restool.exe
+Source:     Huawei / OpenHarmony SDK
+Copyright:  Copyright (c) 2023 Huawei Device Co., Ltd. (as embedded in binary)
+License:    Apache License, Version 2.0 (as indicated by embedded notice)
+            https://www.apache.org/licenses/LICENSE-2.0
+
+
+-------------------------------------------------------------------------------
+7. UiTest Agent (uitest_agent)
+-------------------------------------------------------------------------------
+
+Component:  uitest_agent
+Version:    v1.2.1 (filename)
+Paths:      uitest/uitest_agent_v1.2.1.so
+Source:     OpenHarmony / Huawei Hypium / UiTest device-side agent
+            (OHOS::uitest namespaces as present in the binary)
+Copyright:  Copyright (c) Huawei Device Co., Ltd. / OpenHarmony contributors
+License:    Distributed with OpenHarmony / DevEco testing tooling.
+            See the license texts shipped with the corresponding SDK /
+            Hypium release (commonly Apache License, Version 2.0 for
+            OpenHarmony components).
+
+
+-------------------------------------------------------------------------------
+Disclaimer
+-------------------------------------------------------------------------------
+
+Hadice authors Huolala make no warranty regarding third-party binaries and do not
+claim ownership of them. Upstream projects retain all rights not expressly
+granted by their licenses. Platform trademarks (Android, HarmonyOS,
+OpenHarmony, Huawei, Google, etc.) belong to their respective owners and are
+used here only to identify the redistributed tools.
+
+If you believe a notice is incomplete or incorrect, please open an issue so
+it can be corrected.

@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+option go_package = "Hadice/backend/hypium/scrcpyproto";
+
+message Empty {}
+
+message ParamValue {
+  oneof values {
+    int64 val_int = 1;
+    double val_double = 2;
+    string val_string = 3;
+    bool val_bool = 4;
+    bytes val_bytes = 5;
+    float val_float = 6;
+  }
+}
+
+message ReplyMessage {
+  string data = 1;
+  int32 reply_type = 2;
+  map<string, ParamValue> payload = 3;
+}
+
+message ReplyEndMessage {
+  int32 result = 1;
+}
+
+service ScrcpyService {
+  rpc onStart(Empty) returns (stream ReplyMessage);
+  rpc onEnd(Empty) returns (ReplyEndMessage);
+  rpc onRequestIDRFrame(Empty) returns (ReplyEndMessage);
+}

@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+option go_package = "Hadice/backend/hiprofiler/proto";
+
+import "common_types.proto";
+
+service IProfilerService {
+    rpc GetCapabilities(GetCapabilitiesRequest) returns (GetCapabilitiesResponse);
+    rpc CreateSession(CreateSessionRequest) returns (CreateSessionResponse);
+    rpc StartSession(StartSessionRequest) returns (StartSessionResponse);
+    rpc FetchData(FetchDataRequest) returns (stream FetchDataResponse);
+    rpc StopSession(StopSessionRequest) returns (StopSessionResponse);
+    rpc DestroySession(DestroySessionRequest) returns (DestroySessionResponse);
+    rpc KeepSession(KeepSessionRequest) returns (KeepSessionResponse);
+}

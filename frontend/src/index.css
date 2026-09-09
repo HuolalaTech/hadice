@@ -1,0 +1,126 @@
+@import "tailwindcss";
+
+/* 自定义主题变量 */
+@theme {
+  --color-background: oklch(0.145 0 0);
+  --color-foreground: oklch(0.985 0 0);
+  --color-card: oklch(0.205 0.015 286);
+  --color-card-foreground: oklch(0.985 0 0);
+  --color-popover: oklch(0.205 0.015 286);
+  --color-popover-foreground: oklch(0.985 0 0);
+  --color-primary: oklch(0.65 0.15 50);
+  --color-primary-foreground: oklch(0.98 0.01 100);
+  --color-secondary: oklch(0.269 0.015 286);
+  --color-secondary-foreground: oklch(0.985 0 0);
+  --color-muted: oklch(0.269 0.015 286);
+  --color-muted-foreground: oklch(0.708 0.02 286);
+  --color-accent: oklch(0.269 0.015 286);
+  --color-accent-foreground: oklch(0.985 0 0);
+  --color-destructive: oklch(0.396 0.141 25);
+  --color-destructive-foreground: oklch(0.985 0 0);
+  --color-border: oklch(0.32 0.015 286);
+  --color-input: oklch(0.32 0.015 286);
+  --color-ring: oklch(0.65 0.15 50);
+  --radius: 0.5rem;
+
+  /* HSL 格式变量（用于 Tailwind 配置兼容，暗色主题） */
+  --primary: 24.6 95% 53.1%;
+  --primary-foreground: 60 9.1% 97.8%;
+  --secondary: 240 3.7% 15.9%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 240 3.7% 15.9%;
+  --muted-foreground: 240 5% 64.9%;
+  --accent: 240 3.7% 15.9%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 240 3.7% 15.9%;
+  --input: 240 3.7% 15.9%;
+  --ring: 24.6 95% 53.1%;
+  --background: 0 0% 3.9%;
+  --foreground: 0 0% 98%;
+  --card: 0 0% 3.9%;
+  --card-foreground: 0 0% 98%;
+  --popover: 0 0% 3.9%;
+  --popover-foreground: 0 0% 98%;
+
+  /* 字体配置：等宽字体使用系统栈，不随仓库分发第三方字体文件 */
+  --font-sans: 'Inter', 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+
+/* 基础样式 */
+* {
+  border-color: var(--color-border);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  font-feature-settings: "rlig" 1, "calt" 1;
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/*
+ * 桌面调试工具中的文字应允许鼠标选择和复制。
+ * 覆盖 Tailwind/Radix 在列表、菜单及 label 上设置的 select-none。
+ * 投屏等没有文字的触控画面仍通过 touch-none 和事件处理保持原交互。
+ */
+.select-none {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+/* 等宽字体类 */
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: oklch(0.708 0.02 286 / 0.3);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.708 0.02 286 / 0.5);
+}
+
+/* 滚动条始终可见（虚拟列表容器用） */
+.scrollbar-stable {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.708 0.02 286 / 0.3) transparent;
+}
+
+/* 防止拖拽选中 */
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* 窗口拖拽区域 */
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+/* Wails v3 文件拖放区域悬停样式（由 @wailsio/runtime 自动添加） */
+.file-drop-target-active {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+  background-color: oklch(0.65 0.15 50 / 0.1);
+}

@@ -1,0 +1,251 @@
+version: '3'
+
+includes:
+  common: ../Taskfile.yml
+
+vars:
+  # Docker image for cross-compilation (used when building on non-macOS)
+  CROSS_IMAGE: wails-cross
+
+tasks:
+  build:
+    summary: Builds the application
+    cmds:
+      - task: '{{if eq OS "darwin"}}build:native{{else}}build:docker{{end}}'
+        vars:
+          ARCH: '{{.ARCH}}'
+          DEV: '{{.DEV}}'
+          OUTPUT: '{{.OUTPUT}}'
+          BIN_DIR: '{{.BIN_DIR}}'
+    vars:
+      BIN_DIR: '{{.BIN_DIR | default "bin"}}'
+      DEFAULT_OUTPUT: '{{.BIN_DIR}}/{{.APP_NAME}}'
+      OUTPUT: '{{ .OUTPUT | default .DEFAULT_OUTPUT }}'
+
+  build:native:
+    summary: Builds the application natively on macOS
+    internal: true
+    deps:
+      - task: common:go:mod:tidy
+      - task: common:generate:version
+      - task: common:generate:cienv
+      - task: common:build:frontend
+        vars:
+          BUILD_FLAGS:
+            ref: .BUILD_FLAGS
+          DEV:
+            ref: .DEV
+      - task: common:generate:icons
+    cmds:
+      - mkdir -p {{.BIN_DIR}}
+      - mkdir -p "$(dirname '{{.OUTPUT}}')"
+      - go build {{.BUILD_FLAGS}} -o {{.OUTPUT}}
+      - task: copy:assets
+        vars:
+          ARCH: '{{.ARCH}}'
+          OUTPUT: '{{.OUTPUT}}'
+    vars:
+      BUILD_FLAGS: '{{if eq .DEV "true"}}-buildvcs=false -gcflags=all="-l"{{else}}-tags production -trimpath -buildvcs=false -ldflags="-w -s"{{end}}'
+      BIN_DIR: '{{.BIN_DIR | default "bin"}}'
+      DEFAULT_OUTPUT: '{{.BIN_DIR}}/{{.APP_NAME}}'
+      OUTPUT: '{{ .OUTPUT | default .DEFAULT_OUTPUT }}'
+    env:
+      GOOS: darwin
+      CGO_ENABLED: 1
+      GOARCH: '{{.ARCH | default ARCH}}'
+      CGO_CFLAGS: "-mmacosx-version-min=10.15"
+      CGO_LDFLAGS: "-mmacosx-version-min=10.15"
+      MACOSX_DEPLOYMENT_TARGET: "10.15"
+
+  build:docker:
+    summary: Cross-compiles for macOS using Docker (for Linux/Windows hosts)
+    internal: true
+    deps:
+      - task: common:generate:version
+      - task: common:generate:cienv
+      - task: common:build:frontend
+      - task: common:generate:icons
+    preconditions:
+      - sh: docker info > /dev/null 2>&1
+        msg: "Docker is required for cross-compilation. Please install Docker."
+      - sh: docker image inspect {{.CROSS_IMAGE}} > /dev/null 2>&1
+        msg: |
+          Docker image '{{.CROSS_IMAGE}}' not found.
+          Build it first: wails3 task setup:docker
+    cmds:
+      - docker run --rm -v "{{.ROOT_DIR}}:/app" {{.GO_CACHE_MOUNT}} {{.REPLACE_MOUNTS}} -e APP_NAME={{.APP_NAME}} {{.CROSS_IMAGE}} darwin {{.DOCKER_ARCH}}
+      - docker run --rm -v "{{.ROOT_DIR}}:/app" alpine chown -R $(id -u):$(id -g) /app/bin
+      - mkdir -p {{.BIN_DIR}}
+      - mkdir -p "$(dirname '{{.OUTPUT}}')"
+      - mv bin/{{.APP_NAME}}-darwin-{{.DOCKER_ARCH}} {{.OUTPUT}}
+    vars:
+      DOCKER_ARCH: '{{if eq .ARCH "arm64"}}arm64{{else if eq .ARCH "amd64"}}amd64{{else}}arm64{{end}}'
+      BIN_DIR: '{{.BIN_DIR | default "bin"}}'
+      DEFAULT_OUTPUT: '{{.BIN_DIR}}/{{.APP_NAME}}'
+      OUTPUT: '{{ .OUTPUT | default .DEFAULT_OUTPUT }}'
+      # Mount Go module cache for faster builds
+      GO_CACHE_MOUNT:
+        sh: 'echo "-v ${GOPATH:-$HOME/go}/pkg/mod:/go/pkg/mod"'
+      # Extract replace directives from go.mod and create -v mounts for each
+      # Handles both relative (=> ../) and absolute (=> /) paths
+      REPLACE_MOUNTS:
+        sh: |
+          grep -E '^replace .* => ' go.mod 2>/dev/null | while read -r line; do
+            path=$(echo "$line" | sed -E 's/^replace .* => //' | tr -d '\r')
+            # Convert relative paths to absolute
+            if [ "${path#/}" = "$path" ]; then
+              path="$(cd "$(dirname "$path")" 2>/dev/null && pwd)/$(basename "$path")"
+            fi
+            # Only mount if directory exists
+            if [ -d "$path" ]; then
+              echo "-v $path:$path:ro"
+            fi
+          done | tr '\n' ' '
+
+  build:universal:
+    summary: Builds darwin universal binary (arm64 + amd64)
+    deps:
+      - task: build
+        vars:
+          ARCH: amd64
+          OUTPUT: "{{.BIN_DIR}}/{{.APP_NAME}}-amd64"
+      - task: build
+        vars:
+          ARCH: arm64
+          OUTPUT: "{{.BIN_DIR}}/{{.APP_NAME}}-arm64"
+    cmds:
+      - task: '{{if eq OS "darwin"}}build:universal:lipo:native{{else}}build:universal:lipo:go{{end}}'
+
+  build:universal:lipo:native:
+    summary: Creates universal binary using native lipo (macOS)
+    internal: true
+    cmds:
+      - lipo -create -output "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.BIN_DIR}}/{{.APP_NAME}}-amd64" "{{.BIN_DIR}}/{{.APP_NAME}}-arm64"
+      - rm "{{.BIN_DIR}}/{{.APP_NAME}}-amd64" "{{.BIN_DIR}}/{{.APP_NAME}}-arm64"
+
+  build:universal:lipo:go:
+    summary: Creates universal binary using wails3 tool lipo (Linux/Windows)
+    internal: true
+    cmds:
+      - wails3 tool lipo -o "{{.BIN_DIR}}/{{.APP_NAME}}" -i "{{.BIN_DIR}}/{{.APP_NAME}}-amd64" -i "{{.BIN_DIR}}/{{.APP_NAME}}-arm64"
+      - rm -f "{{.BIN_DIR}}/{{.APP_NAME}}-amd64" "{{.BIN_DIR}}/{{.APP_NAME}}-arm64"
+
+  package:
+    summary: Packages the application into a `.app` bundle
+    deps:
+      - task: build
+    cmds:
+      - task: create:app:bundle
+
+  package:universal:
+    summary: Packages darwin universal binary (arm64 + amd64)
+    deps:
+      - task: build:universal
+    cmds:
+      - task: create:app:bundle
+
+
+  create:app:bundle:
+    summary: Creates an `.app` bundle
+    cmds:
+      - mkdir -p {{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/{MacOS,Resources}
+      - cp build/darwin/icons.icns {{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources
+      - cp {{.BIN_DIR}}/{{.APP_NAME}} {{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS
+      - cp build/darwin/Info.plist {{.BIN_DIR}}/{{.APP_NAME}}.app/Contents
+      - 'if [ -d {{.BIN_DIR}}/bin ]; then cp -r {{.BIN_DIR}}/bin {{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources/; fi'
+      - task: '{{if and (eq OS "darwin") (eq (.SIGN | default "false") "true")}}codesign:adhoc{{else}}codesign:skip{{end}}'
+
+  codesign:adhoc:
+    summary: Ad-hoc signs the app bundle (macOS only)
+    internal: true
+    cmds:
+      - codesign --force --deep --sign - {{.BIN_DIR}}/{{.APP_NAME}}.app
+
+  codesign:skip:
+    summary: Skips codesigning when cross-compiling
+    internal: true
+    cmds:
+      - 'echo "Skipping codesign (not available on {{OS}}). Sign the .app on macOS before distribution."'
+
+  create:dmg:
+    summary: Creates a DMG disk image from the .app bundle
+    cmds:
+      - |
+        set -euo pipefail
+        APP_BUNDLE="{{.BIN_DIR}}/{{.APP_NAME}}.app"
+        DMG_NAME="{{.APP_NAME}}.dmg"
+        DMG_PATH="{{.BIN_DIR}}/$DMG_NAME"
+
+        echo "Creating DMG: $DMG_PATH"
+
+        # Create temporary directory for DMG contents
+        TMP_DIR=$(mktemp -d)
+        DMG_TMP_DIR="$TMP_DIR/dmg"
+        mkdir -p "$DMG_TMP_DIR"
+
+        # Copy app bundle to temporary directory
+        cp -R "$APP_BUNDLE" "$DMG_TMP_DIR/"
+
+        # Create symbolic link to Applications folder
+        ln -s /Applications "$DMG_TMP_DIR/Applications"
+
+        # Create DMG using hdiutil
+        hdiutil create \
+          -volname "{{.APP_NAME}}" \
+          -srcfolder "$DMG_TMP_DIR" \
+          -ov \
+          -format UDZO \
+          -imagekey zlib-level=9 \
+          "$DMG_PATH"
+
+        # Clean up temporary directory
+        rm -rf "$TMP_DIR"
+
+        echo "DMG created successfully: $DMG_PATH"
+    vars:
+      BIN_DIR: '{{.BIN_DIR | default "bin"}}'
+
+  copy:assets:
+    summary: Copies platform-specific binaries and Android agent into app bundle
+    internal: true
+    cmds:
+      - |
+        OUTPUT_DIR="$(dirname '{{.OUTPUT}}')"
+        # Rebuild Resources/bin from scratch so stale files from previous
+        # branches/builds (e.g. leftover bin/ios) never leak into the DMG.
+        RESOURCES_BIN="$OUTPUT_DIR/{{.APP_NAME}}.app/Contents/Resources/bin"
+        rm -rf "$RESOURCES_BIN"
+        mkdir -p "$RESOURCES_BIN"
+        if [ -d assets/darwin/{{.ARCH}}/bin ]; then cp -r assets/darwin/{{.ARCH}}/bin/* "$RESOURCES_BIN/"; fi
+        find "$RESOURCES_BIN" -type f \( -name "hdc" -o -name "restool" -o -name "*.so" -o -name "*.dylib" \) -exec chmod +x {} \; 2>/dev/null || true
+      - |
+        set -e
+        OUTPUT_DIR="$(dirname '{{.OUTPUT}}')"
+        for abi in arm64-v8a armeabi-v7a; do
+          SRC="agent/build/$abi/libnetwork_agent.so"
+          if [ ! -f "$SRC" ]; then
+            echo "Error: missing $SRC — run 'task build:agent' first"
+            exit 1
+          fi
+          AGENT_DIR="$OUTPUT_DIR/{{.APP_NAME}}.app/Contents/Resources/agent/$abi"
+          mkdir -p "$AGENT_DIR"
+          cp "$SRC" "$AGENT_DIR/"
+        done
+        # Ship third-party attribution with redistributed native binaries (never ship .env.ci)
+        RESOURCES="$OUTPUT_DIR/{{.APP_NAME}}.app/Contents/Resources"
+        mkdir -p "$RESOURCES"
+        if [ -f NOTICE ]; then cp NOTICE "$RESOURCES/NOTICE"; fi
+        if [ -f assets/NOTICE ]; then cp assets/NOTICE "$RESOURCES/THIRD_PARTY_NOTICE"; fi
+        if [ -f LICENSE ]; then cp LICENSE "$RESOURCES/LICENSE"; fi
+    vars:
+      OUTPUT: '{{.OUTPUT}}'
+
+  run:
+    cmds:
+      - mkdir -p {{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/{MacOS,Resources}
+      - cp build/darwin/icons.icns {{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Resources
+      - cp {{.BIN_DIR}}/{{.APP_NAME}} {{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/MacOS
+      - cp build/darwin/Info.dev.plist {{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Info.plist
+      - 'if [ -d {{.BIN_DIR}}/bin ]; then cp -r {{.BIN_DIR}}/bin {{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/Resources/; fi'
+      - codesign --force --deep --sign - {{.BIN_DIR}}/{{.APP_NAME}}.dev.app
+      - '{{.BIN_DIR}}/{{.APP_NAME}}.dev.app/Contents/MacOS/{{.APP_NAME}}'

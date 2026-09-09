@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: https://github.com/HuolalaTech/hadice/security/advisories/new
+    about: Please report vulnerabilities privately (see SECURITY.md).
+  - name: Support / docs
+    url: https://github.com/HuolalaTech/hadice/blob/open-source/SUPPORT.md
+    about: Where to ask usage questions and find documentation.

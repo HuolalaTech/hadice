@@ -1,0 +1,133 @@
+syntax = "proto3";
+
+option go_package = "Hadice/backend/hiprofiler/proto";
+
+message ProfilerPluginConfig {
+    string name = 1;
+    string plugin_sha256 = 2;
+    uint32 sample_interval = 3;
+    bytes  config_data = 4;
+    string clock = 5;
+    bool is_protobuf_serialize = 6;
+}
+
+message ProfilerPluginState {
+    string name = 1;
+    enum State {
+        INITED = 0;
+        REGISTERED = 1;
+        LOADED = 2;
+        IN_SESSION = 3;
+    };
+    State state = 2;
+}
+
+message ProfilerPluginData {
+    string name = 1;
+    uint32 status = 2;
+    bytes data = 3;
+    uint64 tv_sec = 5;
+    uint64 tv_nsec = 6;
+    string version = 7;
+    uint32 sample_interval = 8;
+}
+
+message GetCapabilitiesRequest {
+    uint32 request_id = 1;
+}
+
+message ProfilerPluginCapability {
+    string path = 1;
+    string name = 2;
+}
+
+message GetCapabilitiesResponse {
+    uint32 status = 1;
+    repeated ProfilerPluginCapability capabilities = 2;
+}
+
+message ProfilerSessionConfig {
+    message BufferConfig {
+        uint32 pages = 1;
+    }
+    repeated BufferConfig buffers = 1;
+
+    enum Mode {
+        OFFLINE = 0;
+        ONLINE = 1;
+    };
+    Mode session_mode = 2;
+    string result_file = 3;
+    uint32 result_max_size = 4;
+    uint32 sample_duration = 5;
+    uint32 keep_alive_time = 6;
+    bool discard_cache_data = 7;
+    bool split_file = 8;
+    uint32 single_file_max_size_mb = 9;
+}
+
+message CreateSessionRequest {
+    uint32 request_id = 1;
+    ProfilerSessionConfig session_config = 2;
+    repeated ProfilerPluginConfig plugin_configs = 3;
+}
+
+message CreateSessionResponse {
+    uint32 status = 1;
+    uint32 session_id = 2;
+    repeated ProfilerPluginState plugin_status = 3;
+}
+
+message StartSessionRequest {
+    uint32 request_id = 1;
+    uint32 session_id = 2;
+    repeated ProfilerPluginConfig update_configs = 3;
+}
+
+message StartSessionResponse {
+    uint32 status = 1;
+    repeated ProfilerPluginState plugin_status = 3;
+}
+
+message FetchDataRequest {
+    uint32 request_id = 1;
+    uint32 session_id = 2;
+    bytes addtion_data = 3;
+}
+
+message FetchDataResponse {
+    uint32 status = 1;
+    uint32 response_id = 2;
+    bool has_more = 3;
+    repeated ProfilerPluginData plugin_data = 4;
+}
+
+message StopSessionRequest {
+    uint32 request_id = 1;
+    uint32 session_id = 2;
+}
+
+message StopSessionResponse {
+    uint32 status = 1;
+    repeated ProfilerPluginState plugin_status = 3;
+}
+
+message DestroySessionRequest {
+    uint32 request_id = 1;
+    uint32 session_id = 2;
+}
+
+message DestroySessionResponse {
+    uint32 status = 1;
+    repeated ProfilerPluginState plugin_status = 3;
+}
+
+message KeepSessionRequest {
+    uint32 request_id = 1;
+    uint32 session_id = 2;
+    uint32 keep_alive_time = 3;
+}
+
+message KeepSessionResponse {
+    uint32 status = 1;
+}
