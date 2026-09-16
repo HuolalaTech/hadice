@@ -8,13 +8,13 @@
         AllowPromptForPassword="false">
     </Settings>
     <Installer
-        Path="HarmonyHadice"
+        Path="Hadice"
         Arguments=""
-        InstallLocation="C:\Program Files\Haivo\Harmony Hadice">
+        InstallLocation="C:\Program Files\Hadice">
     </Installer>
     <PackageInformation
-        PackageName="Harmony Hadice"
-        PackageDisplayName="Harmony Hadice"
+        PackageName="Hadice"
+        PackageDisplayName="Hadice"
         PublisherName="CN=Haivo"
         PublisherDisplayName="Haivo"
         Version="1.2.0.0"
@@ -27,8 +27,8 @@
             <Application
                 Id="com.haivo.hadice"
                 Description="HarmonyOS Device Testing and Debugging Tool"
-                DisplayName="Harmony Hadice"
-                ExecutableName="HarmonyHadice"
+                DisplayName="Hadice"
+                ExecutableName="Hadice"
                 EntryPoint="Windows.FullTrustApplication">
                 
             </Application>
@@ -41,13 +41,13 @@
         </Dependencies>
         <Properties>
             <Framework>false</Framework>
-            <DisplayName>Harmony Hadice</DisplayName>
+            <DisplayName>Hadice</DisplayName>
             <PublisherDisplayName>Haivo</PublisherDisplayName>
             <Description>HarmonyOS Device Testing and Debugging Tool</Description>
             <Logo>Assets\AppIcon.png</Logo>
         </Properties>
     </PackageInformation>
-    <SaveLocation PackagePath="HarmonyHadice.msix" />
+    <SaveLocation PackagePath="Hadice.msix" />
     <PackageIntegrity>
         <CertificatePath></CertificatePath>
     </PackageIntegrity>

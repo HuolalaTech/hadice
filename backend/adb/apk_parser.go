@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
@@ -62,6 +63,9 @@ func executeAaptDump(dumpType string, apkPath string) (string, error) {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, aaptPath, "dump", dumpType, apkPath)
+	if runtime.GOOS == "windows" {
+		HideWindowsConsoleWindow(cmd)
+	}
 	output, err := cmd.Output()
 	if err != nil {
 		if ctx.Err() != nil {

@@ -216,7 +216,7 @@ task dev
 
 | 命令 | 说明 |
 |------|------|
-| `task build:agent` | 仅编译 Android Agent（需 NDK + JDK） |
+| `task build:agent` | 仅编译 Android Agent（需 NDK + JDK；Windows 原生 PowerShell，无需 WSL） |
 | `task build` | 构建当前平台应用 |
 | `task build:macos:arm64` | macOS Apple Silicon |
 | `task build:macos:amd64` | macOS Intel |

@@ -8,7 +8,7 @@ includes:
 vars:
   APP_NAME: "Hadice"
   APP_VERSION:
-    sh: grep -E 'version:.*[0-9]+\.[0-9]+\.[0-9]+' build/config.yml | head -1 | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)"/\1/'
+    sh: go run ./build/scripts/gen_version.go --print
   BIN_DIR: "bin"
   DIST_DIR: "dist"
   VITE_PORT: '{{.WAILS_VITE_PORT | default 5173}}'
@@ -23,7 +23,10 @@ tasks:
         - agent/build/arm64-v8a/libnetwork_agent.so
         - agent/build/armeabi-v7a/libnetwork_agent.so
     cmds:
-      - bash ./agent/build.sh
+      - cmd: powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./agent/build.ps1
+        platforms: [windows]
+      - cmd: bash ./agent/build.sh
+        platforms: [linux, darwin]
 
   build:
     summary: Builds the application

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.10)
 project(network_agent CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -31,12 +31,29 @@ set(AGENT_SOURCES
     src/bytecode_transformer.cpp
 )
 
+if(DEFINED ANDROID_NDK_ROOT)
+    set(ANDROID_JNI_INCLUDE "${ANDROID_NDK_ROOT}/sysroot/usr/include")
+elseif(DEFINED ANDROID_NDK)
+    set(ANDROID_JNI_INCLUDE "${ANDROID_NDK}/sysroot/usr/include")
+elseif(DEFINED CMAKE_ANDROID_NDK)
+    set(ANDROID_JNI_INCLUDE "${CMAKE_ANDROID_NDK}/sysroot/usr/include")
+endif()
+
 add_library(network_agent SHARED ${AGENT_SOURCES})
 
 target_include_directories(network_agent PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    # Use Android's JNI ABI definitions; the desktop JDK jni.h is not
+    # compatible with the Android cross-compiler's target types.
+    ${ANDROID_JNI_INCLUDE}
     ${JAVA_HOME}/include
-    ${JAVA_HOME}/include/darwin
+)
+
+# jvmti.h includes the desktop JDK jni.h by name. Force-include a small
+# compatibility header so the Android JNI ABI is loaded first and the
+# incompatible desktop header is skipped afterwards.
+target_compile_options(network_agent PRIVATE
+    "-include${CMAKE_CURRENT_SOURCE_DIR}/include/android_jni_compat.h"
 )
 
 target_link_libraries(network_agent
@@ -49,8 +66,7 @@ set_target_properties(network_agent PROPERTIES
     PREFIX "lib"
 )
 
-add_custom_command(TARGET network_agent POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy
-        $<TARGET_FILE:network_agent>
-        ${CMAKE_CURRENT_SOURCE_DIR}/build/${ANDROID_ABI}/
-)
+# The per-ABI CMake build directory is already
+# `${CMAKE_CURRENT_SOURCE_DIR}/build/${ANDROID_ABI}`, so the target output is
+# in the required location. A post-build copy to that same path truncates the
+# just-created shared library on Windows (and is unnecessary on other hosts).

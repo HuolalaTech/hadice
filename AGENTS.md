@@ -22,7 +22,7 @@ task dev   # 先 build:agent，再 Wails 热重载
 | 命令 | 说明 |
 |------|------|
 | `task dev` | 开发模式（含 `build:agent`） |
-| `task build:agent` | 编译 Android JVMTI Agent（需 NDK + JDK） |
+| `task build:agent` | 编译 Android JVMTI Agent（需 NDK + JDK；Windows 原生 PowerShell，无需 WSL） |
 | `task build` / `task build:*` | 构建应用（会先 `build:agent`） |
 | `task build:macos:arm64` / `amd64` | macOS |
 | `task build:windows:amd64` | Windows |
@@ -93,6 +93,9 @@ task dev   # 先 build:agent，再 Wails 热重载
 ### Android Agent
 
 `libnetwork_agent.so` **不入库**，由 `task build:agent` 生成：
+
+- Windows：`agent/build.ps1` + `agent/build_helper.ps1`
+- macOS / Linux：`agent/build.sh` + `agent/build_helper.sh`
 
 - `agent/include/helper_dex.h`
 - `agent/build/{arm64-v8a,armeabi-v7a}/libnetwork_agent.so`

@@ -19,9 +19,9 @@ Unicode true
 ####
 ## The following information is taken from the wails_tools.nsh file, but they can be overwritten here.
 ####
-## !define INFO_PROJECTNAME    "HarmonyHadice" # Default "testproject"
+## !define INFO_PROJECTNAME    "Hadice" # Default "testproject"
 ## !define INFO_COMPANYNAME    "Haivo" # Default "My Company"
-## !define INFO_PRODUCTNAME    "Harmony Hadice" # Default "My Product"
+## !define INFO_PRODUCTNAME    "Hadice" # Default "My Product"
 ## !define INFO_PRODUCTVERSION "1.2.0"     # Default "0.1.0"
 ## !define INFO_COPYRIGHT      "(c) 2026, Haivo" # Default "© 2026, My Company"
 ###
@@ -76,7 +76,7 @@ OutFile "${OUTFILE}"
 !else
 OutFile "..\..\..\bin\${INFO_PROJECTNAME}-${ARCH}-installer.exe"
 !endif
-InstallDir "$PROGRAMFILES64\${INFO_COMPANYNAME}\${INFO_PRODUCTNAME}" # Default installing folder ($PROGRAMFILES is Program Files folder).
+InstallDir "$PROGRAMFILES64\${INFO_PRODUCTNAME}" # Default installing folder ($PROGRAMFILES is Program Files folder).
 ShowInstDetails show # This will always show the installation details.
 
 Function .onInit

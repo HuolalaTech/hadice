@@ -109,6 +109,7 @@ func (s *Server) pushServer(ctx context.Context) error {
 	args := []string{"-s", s.deviceID, "push", serverPath, "/data/local/tmp/scrcpy-server"}
 
 	cmd := exec.CommandContext(ctx, adbPath, args...)
+	s.hideWindow(cmd)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("adb push failed: %v, output: %s", err, string(output))
@@ -126,6 +127,7 @@ func (s *Server) setupForward(ctx context.Context) error {
 		fmt.Sprintf("localabstract:%s", socketName)}
 
 	cmd := exec.CommandContext(ctx, adbPath, args...)
+	s.hideWindow(cmd)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("adb forward failed: %v, output: %s", err, string(output))
@@ -158,9 +160,7 @@ func (s *Server) startServerProcess(ctx context.Context) error {
 		return fmt.Errorf("failed to create stderr pipe: %w", err)
 	}
 
-	if runtime.GOOS == "windows" {
-		s.hideWindow()
-	}
+	s.hideWindow(s.cmd)
 
 	if err := s.cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start server process: %w", err)
@@ -380,6 +380,7 @@ func (s *Server) killStaleServer() {
 	args := []string{"-s", s.deviceID, "shell",
 		"pkill -f com.genymobile.scrcpy.Server || true"}
 	cmd := exec.Command(adbPath, args...)
+	s.hideWindow(cmd)
 	cmd.CombinedOutput()
 	log.Printf("[Scrcpy Server] Killed stale server processes on device: %s", s.deviceID)
 }
@@ -390,6 +391,7 @@ func (s *Server) removeForward() {
 		"--remove", fmt.Sprintf("tcp:%d", s.localPort)}
 
 	cmd := exec.Command(adbPath, args...)
+	s.hideWindow(cmd)
 	cmd.Run()
 
 	log.Printf("[Scrcpy Server] Removed forward: tcp:%d", s.localPort)
@@ -417,8 +419,9 @@ func (s *Server) IsRunning() bool {
 	return s.running
 }
 
-func (s *Server) hideWindow() {
+func (s *Server) hideWindow(cmd *exec.Cmd) {
 	if runtime.GOOS != "windows" {
 		return
 	}
+	adb.HideWindowsConsoleWindow(cmd)
 }

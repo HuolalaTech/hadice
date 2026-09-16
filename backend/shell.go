@@ -14,14 +14,21 @@ import (
 
 	"Hadice/backend/hdc"
 
-	"github.com/creack/pty"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
+
+// shellTerminal 是本地 shell 的双向 I/O。Unix 使用真实 PTY，Windows 使用管道。
+type shellTerminal interface {
+	io.Reader
+	io.Writer
+	io.Closer
+	Resize(cols, rows uint16) error
+}
 
 // ShellProcess 表示一个 Shell 进程
 type ShellProcess struct {
 	ID       string
-	Pty      *os.File
+	Pty      shellTerminal
 	Cmd      *exec.Cmd
 	ctx      context.Context
 	cancel   context.CancelFunc
@@ -115,18 +122,17 @@ func (a *App) StartShell(shellId string) (bool, error) {
 	}
 	cmd.Dir = homeDir
 
-	// 创建 PTY
-	ptmx, err := pty.Start(cmd)
+	// 创建终端。Windows 不支持 creack/pty，因此由平台实现使用命令管道。
+	ptmx, err := startShellTerminal(cmd)
 	if err != nil {
-		log.Printf("[Shell] Failed to start PTY for %s: %v", shellId, err)
-		return false, fmt.Errorf("failed to start PTY: %v", err)
+		log.Printf("[Shell] Failed to start terminal for %s: %v", shellId, err)
+		return false, fmt.Errorf("failed to start terminal: %v", err)
 	}
 
 	// 设置初始大小
-	pty.Setsize(ptmx, &pty.Winsize{
-		Rows: 24,
-		Cols: 80,
-	})
+	if err := ptmx.Resize(80, 24); err != nil {
+		log.Printf("[Shell] Failed to set initial terminal size for %s: %v", shellId, err)
+	}
 
 	// 创建上下文用于取消
 	ctx, cancel := context.WithCancel(context.Background())
@@ -174,7 +180,7 @@ func (a *App) WriteToShell(shellId string, data string) error {
 		return fmt.Errorf("shell %s is closed", shellId)
 	}
 
-	_, err := shellProcess.Pty.WriteString(data)
+	_, err := shellProcess.Pty.Write([]byte(data))
 	if err != nil {
 		log.Printf("[Shell] Failed to write to shell %s: %v", shellId, err)
 		return fmt.Errorf("failed to write to shell: %v", err)
@@ -208,10 +214,7 @@ func (a *App) ResizeShell(shellId string, cols int, rows int) error {
 		rows = 1
 	}
 
-	err := pty.Setsize(shellProcess.Pty, &pty.Winsize{
-		Cols: uint16(cols),
-		Rows: uint16(rows),
-	})
+	err := shellProcess.Pty.Resize(uint16(cols), uint16(rows))
 	if err != nil {
 		log.Printf("[Shell] Failed to resize shell %s: %v", shellId, err)
 		return fmt.Errorf("failed to resize shell: %v", err)

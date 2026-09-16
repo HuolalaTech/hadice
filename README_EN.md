@@ -225,7 +225,7 @@ task dev
 
 | Command | Description |
 |---------|-------------|
-| `task build:agent` | Build Android Agent only (needs NDK + JDK) |
+| `task build:agent` | Build Android Agent only (needs NDK + JDK; native PowerShell on Windows, no WSL) |
 | `task build` | Build for the current platform |
 | `task build:macos:arm64` | macOS Apple Silicon |
 | `task build:macos:amd64` | macOS Intel |

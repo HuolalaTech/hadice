@@ -204,6 +204,9 @@ func ExecuteShellCommandWithTimeout(deviceID, shellCommand string, timeout time.
 	// 使用 adb -s <deviceID> shell sh 作为命令，通过 stdin 传递实际的 shell 命令
 	args := []string{"-s", deviceID, "shell", "sh"}
 	cmd := exec.CommandContext(ctx, adbPath, args...)
+	if runtime.GOOS == "windows" {
+		HideWindowsConsoleWindow(cmd)
+	}
 
 	// 设置 stdin 为要执行的命令
 	cmd.Stdin = strings.NewReader(shellCommand)

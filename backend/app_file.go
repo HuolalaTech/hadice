@@ -193,13 +193,31 @@ func (a *App) OpenFileInSystem(filePath string) (*hdc.HdcResult, error) {
 	case "windows":
 		info, err := os.Stat(filePath)
 		if err == nil && !info.IsDir() {
-			cmd = exec.Command("explorer", "/select,", filePath)
+			// Explorer 要求 /select,<path> 作为一个参数。
+			cmd = exec.Command("explorer", "/select,"+filePath)
 		} else {
 			cmd = exec.Command("explorer", filePath)
 		}
 		hdc.HideWindowsConsoleWindow(cmd)
 	default:
 		cmd = exec.Command("xdg-open", filePath)
+	}
+
+	// Explorer 可能复用已有进程并返回非零退出码；只要进程成功启动即可视为成功。
+	if runtime.GOOS == "windows" {
+		if err := cmd.Start(); err != nil {
+			return &hdc.HdcResult{
+				Success: false,
+				Error:   err.Error(),
+			}, err
+		}
+		go func() {
+			_ = cmd.Wait()
+		}()
+		return &hdc.HdcResult{
+			Success: true,
+			Output:  "文件已打开",
+		}, nil
 	}
 
 	err := cmd.Run()

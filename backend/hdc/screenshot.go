@@ -380,7 +380,7 @@ func OpenScreenshotFolder(ctx interface{}, savePath string) error {
 	default:
 		cmd = exec.Command("xdg-open", targetDir)
 	}
-	return cmd.Run()
+	return runOpenCommand(cmd)
 }
 
 // OpenScreenshotFile 在文件管理器中打开截图文件并定位
@@ -395,14 +395,32 @@ func OpenScreenshotFile(ctx interface{}, filePath string) error {
 	case "darwin":
 		cmd = exec.Command("open", "-R", filePath)
 	case "windows":
-		cmd = exec.Command("explorer", "/select,", filePath)
+		// Explorer 要求 /select,<path> 作为一个参数；拆成两个参数会返回 exit status 1。
+		cmd = exec.Command("explorer", "/select,"+filePath)
 		// Windows 下隐藏命令窗口
 		HideWindowsConsoleWindow(cmd)
 	default:
 		dir := filepath.Dir(filePath)
 		cmd = exec.Command("xdg-open", dir)
 	}
-	return cmd.Run()
+	return runOpenCommand(cmd)
+}
+
+// runOpenCommand 启动系统文件管理器。
+// Windows 的 explorer 可能复用已有进程并返回非零退出码，即使文件夹已成功打开，
+// 因此 Windows 下只检查进程是否能启动，不等待其退出状态。
+func runOpenCommand(cmd *exec.Cmd) error {
+	if runtime.GOOS != "windows" {
+		return cmd.Run()
+	}
+
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() {
+		_ = cmd.Wait()
+	}()
+	return nil
 }
 
 // ReadImageAsBase64 读取本地图片文件并返回 base64 数据 URL

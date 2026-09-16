@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -79,7 +80,11 @@ func fetchAppNameAndIcon(deviceSn string, packageName string) (string, string) {
 	iconBase64 := ""
 
 	// 解析应用名和图标路径
-	badgingOut, _ := exec.Command(aaptPath, "dump", "badging", localApk).CombinedOutput()
+	badgingCmd := exec.Command(aaptPath, "dump", "badging", localApk)
+	if runtime.GOOS == "windows" {
+		HideWindowsConsoleWindow(badgingCmd)
+	}
+	badgingOut, _ := badgingCmd.CombinedOutput()
 	labelRe := regexp.MustCompile(`application: label='([^']*)'`)
 	if m := labelRe.FindSubmatch(badgingOut); len(m) > 1 && string(m[1]) != "" {
 		appName = string(m[1])

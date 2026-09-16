@@ -10,5 +10,5 @@ var embeddedCIEnv = map[string]string{
 	"VITE_POSTHOG_KEY"     : "phc_CFPbJUBCcGtAjNFp86qzGBZtaDv7Dif9iz4KVramREBa",
 	"VITE_POSTHOG_HOST"    : "https://us.i.posthog.com",
 	"VITE_UPDATE_CHECK_URL": "https://raw.githubusercontent.com/Joehaivo/Joehaivo.github.io/refs/heads/main/HadiceVersion.json",
-	"VITE_DOCS_URL"        : "https://huolala.feishu.cn/wiki/We5pwcpP0ivQAck51esclHOtnSf",
+	"VITE_DOCS_URL"        : "https://github.com/HuolalaTech/hadice",
 }

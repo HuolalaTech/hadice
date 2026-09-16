@@ -65,7 +65,13 @@ JNIEnv* Agent::getJniEnv() const {
             args.version = JNI_VERSION_1_6;
             args.name = const_cast<char*>("NetworkAgentThread");
             args.group = nullptr;
+#if defined(ANDROID) || defined(__ANDROID__)
+            // The Android JNI header uses JNIEnv** (the desktop JDK header
+            // uses void**), so pass the typed pointer expected by Android.
+            java_vm_->AttachCurrentThread(&env, &args);
+#else
             java_vm_->AttachCurrentThread(reinterpret_cast<void**>(&env), &args);
+#endif
         }
     }
     return env;
