@@ -20,10 +20,18 @@ export class ScrcpyPlayer {
   private destroyed: boolean = false
   private consecutiveErrors: number = 0
   private waitingForKeyframe: boolean = false
+  private onSizeChange?: (width: number, height: number) => void
+  private activeConfigRecord: Uint8Array | null = null
+  private configuringConfigRecord: Uint8Array | null = null
+  private queuedConfigRecord: Uint8Array | null = null
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    onSizeChange?: (width: number, height: number) => void,
+  ) {
     this.canvas = canvas
     this.ctx = canvas.getContext('2d')!
+    this.onSizeChange = onSizeChange
     console.log('[ScrcpyPlayer] Constructor called')
   }
 
@@ -42,6 +50,9 @@ export class ScrcpyPlayer {
     this.destroyed = false
     this.consecutiveErrors = 0
     this.waitingForKeyframe = false
+    this.activeConfigRecord = null
+    this.configuringConfigRecord = null
+    this.queuedConfigRecord = null
 
     if (this.decoder) {
       try {
@@ -85,6 +96,16 @@ export class ScrcpyPlayer {
       return
     }
     try {
+      const frameWidth = frame.displayWidth || frame.codedWidth
+      const frameHeight = frame.displayHeight || frame.codedHeight
+      if (frameWidth > 0 && frameHeight > 0 &&
+          (frameWidth !== this.width || frameHeight !== this.height)) {
+        this.width = frameWidth
+        this.height = frameHeight
+        this.canvas.width = frameWidth
+        this.canvas.height = frameHeight
+        this.onSizeChange?.(frameWidth, frameHeight)
+      }
       this.ctx.drawImage(frame, 0, 0, this.width, this.height)
       frame.close()
       this.consecutiveErrors = 0
@@ -135,6 +156,21 @@ export class ScrcpyPlayer {
             .map((b) => b.toString(16).padStart(2, '0'))
             .join(' '),
         )
+        if (
+          byteArraysEqual(this.activeConfigRecord, bytes) ||
+          byteArraysEqual(this.configuringConfigRecord, bytes) ||
+          byteArraysEqual(this.queuedConfigRecord, bytes)
+        ) {
+          return
+        }
+        if (this.isConfiguring) {
+          // A newer stream configuration supersedes frames queued for the
+          // configuration currently being prepared.
+          this.queuedConfigRecord = bytes.slice()
+          this.pendingFrames = []
+          return
+        }
+        this.pendingFrames = []
         void this.configureDecoder(bytes)
         return
       }
@@ -211,13 +247,11 @@ export class ScrcpyPlayer {
       console.error('[ScrcpyPlayer] No decoder to configure')
       return
     }
-    if (this.configured) {
-      console.log('[ScrcpyPlayer] Already configured')
-      return
-    }
     if (this.isConfiguring) return
 
     this.isConfiguring = true
+    this.configuringConfigRecord = configRecord.slice()
+    this.configured = false
     try {
       // Extract codec string from AVCDecoderConfigurationRecord bytes [1..3]
       let codecStr = getCodecString(this.codecId)
@@ -230,8 +264,6 @@ export class ScrcpyPlayer {
 
       const config: VideoDecoderConfig = {
         codec: codecStr,
-        codedWidth: this.width,
-        codedHeight: this.height,
         description: configRecord.buffer,
       }
 
@@ -261,6 +293,9 @@ export class ScrcpyPlayer {
         return
       }
 
+      if (this.decoder.state === 'configured') {
+        this.decoder.reset()
+      }
       this.decoder.configure(config)
 
       if (this.decoder.state !== 'configured') {
@@ -273,17 +308,27 @@ export class ScrcpyPlayer {
       }
 
       this.configured = true
+      this.waitingForKeyframe = true
+      this.activeConfigRecord = configRecord.slice()
       console.log('[ScrcpyPlayer] Decoder configured successfully')
 
-      for (const frame of this.pendingFrames) {
-        this.decodeFrame(frame.data, frame.isKeyframe, frame.pts)
+      if (!this.queuedConfigRecord) {
+        for (const frame of this.pendingFrames) {
+          this.decodeFrame(frame.data, frame.isKeyframe, frame.pts)
+        }
+        this.pendingFrames = []
       }
-      this.pendingFrames = []
     } catch (e) {
       console.error('[ScrcpyPlayer] Configure decoder error:', e)
       this.pendingFrames = []
     } finally {
       this.isConfiguring = false
+      this.configuringConfigRecord = null
+      const nextConfig = this.queuedConfigRecord
+      this.queuedConfigRecord = null
+      if (nextConfig && !byteArraysEqual(this.activeConfigRecord, nextConfig)) {
+        void this.configureDecoder(nextConfig)
+      }
     }
   }
 
@@ -301,6 +346,9 @@ export class ScrcpyPlayer {
     }
     this.configured = false
     this.isConfiguring = false
+    this.activeConfigRecord = null
+    this.configuringConfigRecord = null
+    this.queuedConfigRecord = null
   }
 
   getFps(): number {
@@ -314,4 +362,12 @@ export class ScrcpyPlayer {
   isConfigured(): boolean {
     return this.configured
   }
+}
+
+function byteArraysEqual(left: Uint8Array | null, right: Uint8Array): boolean {
+  if (!left || left.length !== right.length) return false
+  for (let i = 0; i < left.length; i++) {
+    if (left[i] !== right[i]) return false
+  }
+  return true
 }

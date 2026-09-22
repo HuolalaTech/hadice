@@ -37,6 +37,7 @@ export function ScreenMirrorScreenshotPage(): React.JSX.Element {
   const [format, setFormat] = useState<'jpeg' | 'png'>('jpeg')
   const [videoQuality, setVideoQuality] = useState<'0.2' | '0.3' | '0.4' | '0.5' | '0.6' | '0.7' | '0.8' | '0.9'>('0.9')
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
+  const [rotationQuarterTurns, setRotationQuarterTurns] = useState(0)
 
   // 预览和删除弹窗状态
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false)
@@ -97,8 +98,9 @@ export function ScreenMirrorScreenshotPage(): React.JSX.Element {
       createCoordinateConverter(
         isAndroid || isH264 ? canvasRef : imgRef,
         isAndroid ? null : displaySize,
+        rotationQuarterTurns,
       ),
-    [isAndroid, isH264, canvasRef, imgRef, displaySize],
+    [isAndroid, isH264, canvasRef, imgRef, displaySize, rotationQuarterTurns],
   )
 
   // 触摸事件处理
@@ -253,12 +255,13 @@ export function ScreenMirrorScreenshotPage(): React.JSX.Element {
       {/* 主内容区 */}
       <div className="flex-1 flex gap-1 min-h-0 overflow-hidden">
         {/* 左侧：投屏显示区域和控制按钮 */}
-        <div className="flex gap-1 flex-shrink-0">
+        <div className="flex items-start gap-1 flex-shrink-0">
           <ScreenMirrorView
             isStreaming={isStreaming}
             isAndroid={isAndroid}
             isH264={isH264}
             displaySize={displaySize}
+            rotationQuarterTurns={rotationQuarterTurns}
             imgRef={imgRef}
             canvasRef={canvasRef}
             onImageClick={handleImageClick}
@@ -273,7 +276,11 @@ export function ScreenMirrorScreenshotPage(): React.JSX.Element {
             onWheel={handleWheel}
           />
 
-          <ControlButtons isStreaming={isStreaming} onAction={handleControlAction} />
+          <ControlButtons
+            isStreaming={isStreaming}
+            onAction={handleControlAction}
+            onRotate={() => setRotationQuarterTurns((turns) => (turns + 1) % 4)}
+          />
         </div>
 
         {/* 右侧：图片画廊 */}

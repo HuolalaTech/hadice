@@ -223,12 +223,12 @@ func BuildAVCDecoderConfigRecord(configData []byte) ([]byte, error) {
 	recordLen := 6 + 2 + len(sps) + 1 + 2 + len(pps)
 	record := make([]byte, recordLen)
 
-	record[0] = 1          // configurationVersion
-	record[1] = sps[1]     // AVCProfileIndication
-	record[2] = sps[2]     // profile_compatibility
-	record[3] = sps[3]     // AVCLevelIndication
-	record[4] = 0xFF       // reserved(6 bits, all 1) + lengthSizeMinusOne(3)
-	record[5] = 0xE1       // reserved(3 bits, all 1) + numOfSPS(1)
+	record[0] = 1      // configurationVersion
+	record[1] = sps[1] // AVCProfileIndication
+	record[2] = sps[2] // profile_compatibility
+	record[3] = sps[3] // AVCLevelIndication
+	record[4] = 0xFF   // reserved(6 bits, all 1) + lengthSizeMinusOne(3)
+	record[5] = 0xE1   // reserved(3 bits, all 1) + numOfSPS(1)
 	binary.BigEndian.PutUint16(record[6:8], uint16(len(sps)))
 	copy(record[8:], sps)
 
@@ -238,4 +238,270 @@ func BuildAVCDecoderConfigRecord(configData []byte) ([]byte, error) {
 	copy(record[off+3:], pps)
 
 	return record, nil
+}
+
+type spsBitReader struct {
+	data []byte
+	pos  int
+}
+
+func (r *spsBitReader) readBit() (uint32, bool) {
+	if r.pos >= len(r.data)*8 {
+		return 0, false
+	}
+	byteIdx := r.pos / 8
+	bitIdx := 7 - (r.pos % 8)
+	r.pos++
+	return uint32((r.data[byteIdx] >> bitIdx) & 1), true
+}
+
+func (r *spsBitReader) readBits(n int) (uint32, bool) {
+	var value uint32
+	for i := 0; i < n; i++ {
+		bit, ok := r.readBit()
+		if !ok {
+			return 0, false
+		}
+		value = value<<1 | bit
+	}
+	return value, true
+}
+
+func (r *spsBitReader) readUE() (uint32, bool) {
+	leadingZeros := 0
+	for {
+		bit, ok := r.readBit()
+		if !ok || leadingZeros > 31 {
+			return 0, false
+		}
+		if bit == 1 {
+			break
+		}
+		leadingZeros++
+	}
+	if leadingZeros == 0 {
+		return 0, true
+	}
+	suffix, ok := r.readBits(leadingZeros)
+	if !ok {
+		return 0, false
+	}
+	return uint32(1<<leadingZeros-1) + suffix, true
+}
+
+func (r *spsBitReader) readSE() (int32, bool) {
+	value, ok := r.readUE()
+	if !ok {
+		return 0, false
+	}
+	if value%2 == 0 {
+		return -int32(value / 2), true
+	}
+	return int32((value + 1) / 2), true
+}
+
+func skipScalingList(reader *spsBitReader, size int) bool {
+	lastScale := int32(8)
+	nextScale := int32(8)
+	for i := 0; i < size; i++ {
+		if nextScale != 0 {
+			deltaScale, ok := reader.readSE()
+			if !ok {
+				return false
+			}
+			nextScale = (lastScale + deltaScale + 256) % 256
+		}
+		if nextScale != 0 {
+			lastScale = nextScale
+		}
+	}
+	return true
+}
+
+// ParseH264Dimensions reads the coded frame dimensions from the SPS contained
+// in an Annex-B configuration packet. scrcpy sends a new SPS/PPS when Android
+// recreates the encoder after an Activity orientation change.
+func ParseH264Dimensions(configData []byte) (uint32, uint32, bool) {
+	var sps []byte
+	for _, nalu := range ParseAnnexBNALUnits(configData) {
+		if len(nalu) > 1 && nalu[0]&0x1F == 7 {
+			sps = nalu
+			break
+		}
+	}
+	if sps == nil {
+		return 0, 0, false
+	}
+
+	reader := &spsBitReader{data: h264UnescapeRBSP(sps)}
+	profileIDC, ok := reader.readBits(8)
+	if !ok {
+		return 0, 0, false
+	}
+	if _, ok = reader.readBits(8); !ok { // constraint flags and reserved bits
+		return 0, 0, false
+	}
+	if _, ok = reader.readBits(8); !ok { // level_idc
+		return 0, 0, false
+	}
+	if _, ok = reader.readUE(); !ok { // seq_parameter_set_id
+		return 0, 0, false
+	}
+
+	chromaFormatIDC := uint32(1)
+	separateColourPlane := uint32(0)
+	switch profileIDC {
+	case 100, 110, 122, 244, 44, 83, 86, 118, 128, 138, 139, 134, 135:
+		chromaFormatIDC, ok = reader.readUE()
+		if !ok || chromaFormatIDC > 3 {
+			return 0, 0, false
+		}
+		if chromaFormatIDC == 3 {
+			separateColourPlane, ok = reader.readBit()
+			if !ok {
+				return 0, 0, false
+			}
+		}
+		if _, ok = reader.readUE(); !ok { // bit_depth_luma_minus8
+			return 0, 0, false
+		}
+		if _, ok = reader.readUE(); !ok { // bit_depth_chroma_minus8
+			return 0, 0, false
+		}
+		if _, ok = reader.readBit(); !ok { // qpprime_y_zero_transform_bypass_flag
+			return 0, 0, false
+		}
+		scalingMatrixPresent, valid := reader.readBit()
+		if !valid {
+			return 0, 0, false
+		}
+		if scalingMatrixPresent == 1 {
+			listCount := 8
+			if chromaFormatIDC == 3 {
+				listCount = 12
+			}
+			for i := 0; i < listCount; i++ {
+				present, valid := reader.readBit()
+				if !valid {
+					return 0, 0, false
+				}
+				if present == 1 {
+					size := 16
+					if i >= 6 {
+						size = 64
+					}
+					if !skipScalingList(reader, size) {
+						return 0, 0, false
+					}
+				}
+			}
+		}
+	}
+
+	if _, ok = reader.readUE(); !ok { // log2_max_frame_num_minus4
+		return 0, 0, false
+	}
+	picOrderCntType, ok := reader.readUE()
+	if !ok {
+		return 0, 0, false
+	}
+	if picOrderCntType == 0 {
+		if _, ok = reader.readUE(); !ok {
+			return 0, 0, false
+		}
+	} else if picOrderCntType == 1 {
+		if _, ok = reader.readBit(); !ok {
+			return 0, 0, false
+		}
+		if _, ok = reader.readSE(); !ok {
+			return 0, 0, false
+		}
+		if _, ok = reader.readSE(); !ok {
+			return 0, 0, false
+		}
+		cycleCount, valid := reader.readUE()
+		if !valid {
+			return 0, 0, false
+		}
+		for i := uint32(0); i < cycleCount; i++ {
+			if _, ok = reader.readSE(); !ok {
+				return 0, 0, false
+			}
+		}
+	}
+
+	if _, ok = reader.readUE(); !ok { // max_num_ref_frames
+		return 0, 0, false
+	}
+	if _, ok = reader.readBit(); !ok { // gaps_in_frame_num_value_allowed_flag
+		return 0, 0, false
+	}
+	picWidthInMbsMinus1, ok := reader.readUE()
+	if !ok {
+		return 0, 0, false
+	}
+	picHeightInMapUnitsMinus1, ok := reader.readUE()
+	if !ok {
+		return 0, 0, false
+	}
+	frameMbsOnlyFlag, ok := reader.readBit()
+	if !ok {
+		return 0, 0, false
+	}
+	if frameMbsOnlyFlag == 0 {
+		if _, ok = reader.readBit(); !ok { // mb_adaptive_frame_field_flag
+			return 0, 0, false
+		}
+	}
+	if _, ok = reader.readBit(); !ok { // direct_8x8_inference_flag
+		return 0, 0, false
+	}
+
+	var cropLeft, cropRight, cropTop, cropBottom uint32
+	frameCroppingFlag, ok := reader.readBit()
+	if !ok {
+		return 0, 0, false
+	}
+	if frameCroppingFlag == 1 {
+		if cropLeft, ok = reader.readUE(); !ok {
+			return 0, 0, false
+		}
+		if cropRight, ok = reader.readUE(); !ok {
+			return 0, 0, false
+		}
+		if cropTop, ok = reader.readUE(); !ok {
+			return 0, 0, false
+		}
+		if cropBottom, ok = reader.readUE(); !ok {
+			return 0, 0, false
+		}
+	}
+
+	frameFactor := uint32(2) - frameMbsOnlyFlag
+	width := (picWidthInMbsMinus1 + 1) * 16
+	height := frameFactor * (picHeightInMapUnitsMinus1 + 1) * 16
+	chromaArrayType := chromaFormatIDC
+	if separateColourPlane == 1 {
+		chromaArrayType = 0
+	}
+	cropUnitX := uint32(1)
+	cropUnitY := frameFactor
+	if chromaArrayType != 0 {
+		subWidthC := uint32(1)
+		subHeightC := uint32(1)
+		if chromaArrayType == 1 || chromaArrayType == 2 {
+			subWidthC = 2
+		}
+		if chromaArrayType == 1 {
+			subHeightC = 2
+		}
+		cropUnitX = subWidthC
+		cropUnitY = subHeightC * frameFactor
+	}
+	horizontalCrop := (cropLeft + cropRight) * cropUnitX
+	verticalCrop := (cropTop + cropBottom) * cropUnitY
+	if horizontalCrop >= width || verticalCrop >= height {
+		return 0, 0, false
+	}
+	return width - horizontalCrop, height - verticalCrop, true
 }

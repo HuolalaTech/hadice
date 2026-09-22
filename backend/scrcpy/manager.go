@@ -205,16 +205,30 @@ func (m *Manager) EmitFrame(deviceID string, frame *VideoFrame) {
 			return
 		}
 
+		width, height, hasDimensions := ParseH264Dimensions(frame.Data)
+
 		m.mu.RLock()
 		session := m.sessions[deviceID]
 		m.mu.RUnlock()
 		if session != nil {
 			session.mu.Lock()
 			session.avcConfigRecord = record
+			if hasDimensions && session.video != nil && session.video.codec != nil {
+				session.video.codec.Width = width
+				session.video.codec.Height = height
+			}
+			control := session.control
 			session.mu.Unlock()
+			if hasDimensions && control != nil {
+				control.SetScreenSize(uint16(width), uint16(height))
+			}
 		}
 
-		log.Printf("[EmitFrame] Config frame: deviceSn=%s, raw=%d bytes, record=%d bytes", deviceID, len(frame.Data), len(record))
+		if hasDimensions {
+			log.Printf("[EmitFrame] Config frame: deviceSn=%s, raw=%d bytes, record=%d bytes, size=%dx%d", deviceID, len(frame.Data), len(record), width, height)
+		} else {
+			log.Printf("[EmitFrame] Config frame: deviceSn=%s, raw=%d bytes, record=%d bytes", deviceID, len(frame.Data), len(record))
+		}
 
 		app.Event.Emit("screenMirror:frame", map[string]interface{}{
 			"deviceSn":   deviceID,

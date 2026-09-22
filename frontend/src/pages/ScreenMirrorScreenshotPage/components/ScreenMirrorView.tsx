@@ -7,6 +7,7 @@ interface ScreenMirrorViewProps {
   isAndroid: boolean
   isH264: boolean
   displaySize: { width: number; height: number } | null
+  rotationQuarterTurns: number
   imgRef: RefObject<HTMLImageElement | null>
   canvasRef: RefObject<HTMLCanvasElement | null>
   onImageClick: (event: React.MouseEvent<HTMLImageElement>) => void
@@ -26,6 +27,7 @@ export function ScreenMirrorView({
   isAndroid,
   isH264,
   displaySize,
+  rotationQuarterTurns,
   imgRef,
   canvasRef,
   onImageClick,
@@ -63,15 +65,17 @@ export function ScreenMirrorView({
     if (!container) return
 
     const updateMaximumSize = () => {
-      const { width, height } = container.getBoundingClientRect()
-      setMaxFrameHeight(Math.max(0, Math.min(height, width / aspectRatio)))
+      const { height } = container.getBoundingClientRect()
+      if (height > 0) {
+        setMaxFrameHeight(getMaximumFrameHeight(height, aspectRatio, rotationQuarterTurns))
+      }
     }
 
     updateMaximumSize()
     const observer = new ResizeObserver(updateMaximumSize)
     observer.observe(container)
     return () => observer.disconnect()
-  }, [aspectRatio])
+  }, [aspectRatio, rotationQuarterTurns])
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -83,23 +87,36 @@ export function ScreenMirrorView({
       const deltaY = event.clientY - drag.startY
       const horizontalDirection = drag.edge.includes('e') ? 1 : drag.edge.includes('w') ? -1 : 0
       const verticalDirection = drag.edge.includes('s') ? 1 : drag.edge.includes('n') ? -1 : 0
+      const angle = -rotationQuarterTurns * Math.PI / 2
+      const cos = Math.round(Math.cos(angle))
+      const sin = Math.round(Math.sin(angle))
 
       let scale: number
       if (horizontalDirection && verticalDirection) {
         // Project the pointer movement onto the corner's diagonal so the frame
         // always keeps the device aspect ratio.
-        const vectorX = horizontalDirection * drag.startWidth
-        const vectorY = verticalDirection * drag.startHeight
+        const logicalVectorX = horizontalDirection * drag.startWidth
+        const logicalVectorY = verticalDirection * drag.startHeight
+        const vectorX = logicalVectorX * cos - logicalVectorY * sin
+        const vectorY = logicalVectorX * sin + logicalVectorY * cos
         scale = 1 + (deltaX * vectorX + deltaY * vectorY) /
           (drag.startWidth ** 2 + drag.startHeight ** 2)
-      } else if (horizontalDirection) {
-        scale = 1 + (deltaX * horizontalDirection) / drag.startWidth
       } else {
-        scale = 1 + (deltaY * verticalDirection) / drag.startHeight
+        const logicalDirectionX = horizontalDirection
+        const logicalDirectionY = verticalDirection
+        const directionX = logicalDirectionX * cos - logicalDirectionY * sin
+        const directionY = logicalDirectionX * sin + logicalDirectionY * cos
+        const projectedDelta = deltaX * directionX + deltaY * directionY
+        const startLength = horizontalDirection ? drag.startWidth : drag.startHeight
+        scale = 1 + projectedDelta / startLength
       }
 
       const bounds = container.getBoundingClientRect()
-      const maximumHeight = Math.min(bounds.height, bounds.width / aspectRatio)
+      const maximumHeight = getMaximumFrameHeight(
+        bounds.height,
+        aspectRatio,
+        rotationQuarterTurns
+      )
       const minimumHeight = Math.min(180, maximumHeight)
       const nextHeight = Math.min(maximumHeight, Math.max(minimumHeight, drag.startHeight * scale))
       setPreferredHeight(nextHeight)
@@ -122,7 +139,7 @@ export function ScreenMirrorView({
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
-  }, [aspectRatio])
+  }, [aspectRatio, rotationQuarterTurns])
 
   const startResize = useCallback((edge: ResizeEdge, event: React.PointerEvent<HTMLDivElement>) => {
     const frame = frameRef.current
@@ -131,21 +148,30 @@ export function ScreenMirrorView({
     event.preventDefault()
     event.stopPropagation()
     event.currentTarget.setPointerCapture(event.pointerId)
-    const bounds = frame.getBoundingClientRect()
     dragRef.current = {
       edge,
       startX: event.clientX,
       startY: event.clientY,
-      startWidth: bounds.width,
-      startHeight: bounds.height
+      startWidth: frame.offsetWidth,
+      startHeight: frame.offsetHeight
     }
-    document.body.style.cursor = resizeCursors[edge]
+    document.body.style.cursor = getResizeCursor(edge, rotationQuarterTurns)
     document.body.style.userSelect = 'none'
-  }, [])
+  }, [rotationQuarterTurns])
 
   const renderedHeight = maxFrameHeight === null
     ? preferredHeight
     : Math.min(preferredHeight ?? maxFrameHeight, maxFrameHeight)
+  const logicalWidth = renderedHeight === null ? null : renderedHeight * aspectRatio
+  const isSideways = rotationQuarterTurns % 2 === 1
+  const stageWidth = renderedHeight === null
+    ? MAX_FRAME_SHORT_EDGE
+    : isSideways ? renderedHeight : logicalWidth
+  const frameTransform = getFrameTransform(
+    rotationQuarterTurns,
+    logicalWidth ?? 0,
+    renderedHeight ?? 0
+  )
 
   const containerStyle: React.CSSProperties = {
     maxHeight: '100%',
@@ -168,18 +194,21 @@ export function ScreenMirrorView({
   return (
     <Card
       ref={containerRef}
-      className="w-[400px] flex items-center justify-center overflow-visible bg-transparent border-0 shadow-none min-w-0 relative flex-shrink-0 p-0"
+      className="h-full overflow-visible bg-transparent border-0 shadow-none min-w-0 relative flex-shrink-0 p-0"
+      style={{ width: `${stageWidth}px` }}
     >
       <div
         ref={frameRef}
-        className="relative flex items-center justify-center select-none border-2 border-dashed border-primary/50 rounded-lg shadow-lg"
+        className="absolute left-0 top-0 flex items-center justify-center select-none border-2 border-dashed border-primary/50 rounded-lg shadow-lg"
         style={{
           aspectRatio,
           height: renderedHeight === null ? '100%' : `${renderedHeight}px`,
           maxHeight: '100%',
           maxWidth: '100%',
           userSelect: 'none',
-          WebkitUserSelect: 'none'
+          WebkitUserSelect: 'none',
+          transform: frameTransform,
+          transformOrigin: 'top left'
         }}
         onMouseDownCapture={(event) => event.preventDefault()}
         onTouchStartCapture={(event) => event.preventDefault()}
@@ -229,7 +258,7 @@ export function ScreenMirrorView({
           <div
             key={edge}
             className={`absolute z-20 ${className}`}
-            style={{ cursor: resizeCursors[edge], touchAction: 'none' }}
+            style={{ cursor: getResizeCursor(edge, rotationQuarterTurns), touchAction: 'none' }}
             onPointerDown={(event) => startResize(edge, event)}
             title="拖动调整投屏大小"
           />
@@ -241,15 +270,42 @@ export function ScreenMirrorView({
 
 type ResizeEdge = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
 
-const resizeCursors: Record<ResizeEdge, React.CSSProperties['cursor']> = {
-  n: 'ns-resize',
-  s: 'ns-resize',
-  e: 'ew-resize',
-  w: 'ew-resize',
-  ne: 'nesw-resize',
-  sw: 'nesw-resize',
-  nw: 'nwse-resize',
-  se: 'nwse-resize'
+const MAX_FRAME_SHORT_EDGE = 400
+
+function getMaximumFrameHeight(
+  containerHeight: number,
+  aspectRatio: number,
+  rotationQuarterTurns: number
+): number {
+  const shortEdgeLimit = aspectRatio <= 1
+    ? MAX_FRAME_SHORT_EDGE / aspectRatio
+    : MAX_FRAME_SHORT_EDGE
+  const isSideways = rotationQuarterTurns % 2 === 1
+  const verticalLimit = isSideways ? containerHeight / aspectRatio : containerHeight
+  return Math.max(0, Math.min(shortEdgeLimit, verticalLimit))
+}
+
+function getFrameTransform(rotationQuarterTurns: number, width: number, height: number): string {
+  const rotation = ((rotationQuarterTurns % 4) + 4) % 4
+  if (rotation === 1) return `matrix(0, -1, 1, 0, 0, ${width})`
+  if (rotation === 2) return `matrix(-1, 0, 0, -1, ${width}, ${height})`
+  if (rotation === 3) return `matrix(0, 1, -1, 0, ${height}, 0)`
+  return 'none'
+}
+
+function getResizeCursor(
+  edge: ResizeEdge,
+  rotationQuarterTurns: number
+): React.CSSProperties['cursor'] {
+  const logicalX = edge.includes('e') ? 1 : edge.includes('w') ? -1 : 0
+  const logicalY = edge.includes('s') ? 1 : edge.includes('n') ? -1 : 0
+  const angle = -rotationQuarterTurns * Math.PI / 2
+  const screenX = Math.round(logicalX * Math.cos(angle) - logicalY * Math.sin(angle))
+  const screenY = Math.round(logicalX * Math.sin(angle) + logicalY * Math.cos(angle))
+
+  if (screenX === 0) return 'ns-resize'
+  if (screenY === 0) return 'ew-resize'
+  return screenX * screenY > 0 ? 'nwse-resize' : 'nesw-resize'
 }
 
 const resizeHandles: Array<{ edge: ResizeEdge; className: string }> = [

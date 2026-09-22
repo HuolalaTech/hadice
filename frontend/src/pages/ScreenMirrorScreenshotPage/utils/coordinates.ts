@@ -19,6 +19,7 @@
 export function createCoordinateConverter(
   surfaceRef: React.RefObject<HTMLImageElement | HTMLCanvasElement | null>,
   displaySize: { width: number; height: number } | null,
+  rotationQuarterTurns = 0,
 ) {
   return (
     clientX: number,
@@ -30,6 +31,7 @@ export function createCoordinateConverter(
 
     const el = surfaceRef.current;
     const rect = el.getBoundingClientRect();
+    const normalizedRotation = ((rotationQuarterTurns % 4) + 4) % 4;
 
     // 1. 获取并去除边框
     const computedStyle = window.getComputedStyle(el);
@@ -38,10 +40,11 @@ export function createCoordinateConverter(
     const borderRight = parseFloat(computedStyle.borderRightWidth) || 0;
     const borderBottom = parseFloat(computedStyle.borderBottomWidth) || 0;
 
-    const displayLeft = rect.left + borderLeft;
-    const displayTop = rect.top + borderTop;
-    const displayWidth = rect.width - borderLeft - borderRight;
-    const displayHeight = rect.height - borderTop - borderBottom;
+    const isSideways = normalizedRotation % 2 === 1;
+    const borderBoxWidth = isSideways ? rect.height : rect.width;
+    const borderBoxHeight = isSideways ? rect.width : rect.height;
+    const displayWidth = borderBoxWidth - borderLeft - borderRight;
+    const displayHeight = borderBoxHeight - borderTop - borderBottom;
 
     // 2. 获取视频流的实际像素尺寸
     // 对于 canvas：width/height 是像素尺寸
@@ -61,17 +64,44 @@ export function createCoordinateConverter(
 
     // 4. 检查点击是否在显示区域内
     if (
-      clientX < displayLeft ||
-      clientX > displayLeft + displayWidth ||
-      clientY < displayTop ||
-      clientY > displayTop + displayHeight
+      clientX < rect.left ||
+      clientX > rect.right ||
+      clientY < rect.top ||
+      clientY > rect.bottom
     ) {
       return null;
     }
 
     // 5. 计算相对于显示区域的坐标（CSS 像素）
-    let relativeX = clientX - displayLeft;
-    let relativeY = clientY - displayTop;
+    const screenX = (clientX - rect.left) / rect.width;
+    const screenY = (clientY - rect.top) / rect.height;
+    let normalizedX = screenX;
+    let normalizedY = screenY;
+
+    if (normalizedRotation === 1) {
+      normalizedX = 1 - screenY;
+      normalizedY = screenX;
+    } else if (normalizedRotation === 2) {
+      normalizedX = 1 - screenX;
+      normalizedY = 1 - screenY;
+    } else if (normalizedRotation === 3) {
+      normalizedX = screenY;
+      normalizedY = 1 - screenX;
+    }
+
+    const logicalX = normalizedX * borderBoxWidth;
+    const logicalY = normalizedY * borderBoxHeight;
+    if (
+      logicalX < borderLeft ||
+      logicalX > borderBoxWidth - borderRight ||
+      logicalY < borderTop ||
+      logicalY > borderBoxHeight - borderBottom
+    ) {
+      return null;
+    }
+
+    let relativeX = logicalX - borderLeft;
+    let relativeY = logicalY - borderTop;
 
     // 6. 计算 canvas/img 的实际渲染尺寸（考虑 object-fit: contain）
     // CSS 尺寸可能和视频流尺寸比例不同，需要计算实际渲染区域

@@ -82,7 +82,9 @@ export function useScreenMirror(
               setIsH264(true)
               console.log('[useScreenMirror] Device match! Creating player, canvasRef:', !!canvasRef.current)
               if (canvasRef.current && !playerRef.current) {
-                playerRef.current = new ScrcpyPlayer(canvasRef.current)
+                playerRef.current = new ScrcpyPlayer(canvasRef.current, (width, height) => {
+                  setDisplaySize({ width, height })
+                })
                 console.log('[useScreenMirror] Player created')
               }
               if (playerRef.current) {
