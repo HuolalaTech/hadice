@@ -5,10 +5,10 @@ package backend
 // embeddedCIEnv holds private CI defaults baked into the binary at build time.
 // Runtime process env and a local `.env.ci` (dev) still take precedence when set.
 var embeddedCIEnv = map[string]string{
-	"POSTHOG_API_KEY"      : "phc_CFPbJUBCcGtAjNFp86qzGBZtaDv7Dif9iz4KVramREBa",
-	"POSTHOG_CAPTURE_URL"  : "https://us.i.posthog.com/capture/",
-	"VITE_POSTHOG_KEY"     : "phc_CFPbJUBCcGtAjNFp86qzGBZtaDv7Dif9iz4KVramREBa",
-	"VITE_POSTHOG_HOST"    : "https://us.i.posthog.com",
-	"VITE_UPDATE_CHECK_URL": "https://raw.githubusercontent.com/Joehaivo/Joehaivo.github.io/refs/heads/main/HadiceVersion.json",
-	"VITE_DOCS_URL"        : "https://github.com/HuolalaTech/hadice",
+	"POSTHOG_API_KEY"      : "",
+	"POSTHOG_CAPTURE_URL"  : "",
+	"VITE_POSTHOG_KEY"     : "",
+	"VITE_POSTHOG_HOST"    : "",
+	"VITE_UPDATE_CHECK_URL": "",
+	"VITE_DOCS_URL"        : "",
 }

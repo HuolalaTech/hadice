@@ -31,28 +31,24 @@ set(AGENT_SOURCES
     src/bytecode_transformer.cpp
 )
 
-if(DEFINED ANDROID_NDK_ROOT)
-    set(ANDROID_JNI_INCLUDE "${ANDROID_NDK_ROOT}/sysroot/usr/include")
-elseif(DEFINED ANDROID_NDK)
-    set(ANDROID_JNI_INCLUDE "${ANDROID_NDK}/sysroot/usr/include")
-elseif(DEFINED CMAKE_ANDROID_NDK)
-    set(ANDROID_JNI_INCLUDE "${CMAKE_ANDROID_NDK}/sysroot/usr/include")
+set(ANDROID_JNI_INCLUDE "${CMAKE_SYSROOT}/usr/include")
+if(NOT EXISTS "${ANDROID_JNI_INCLUDE}/jni.h")
+    message(FATAL_ERROR "Android jni.h not found in CMAKE_SYSROOT: ${CMAKE_SYSROOT}")
 endif()
 
 add_library(network_agent SHARED ${AGENT_SOURCES})
 
 target_include_directories(network_agent PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-    # Use Android's JNI ABI definitions; the desktop JDK jni.h is not
-    # compatible with the Android cross-compiler's target types.
-    ${ANDROID_JNI_INCLUDE}
     ${JAVA_HOME}/include
 )
 
-# jvmti.h includes the desktop JDK jni.h by name. Force-include a small
-# compatibility header so the Android JNI ABI is loaded first and the
-# incompatible desktop header is skipped afterwards.
+# jvmti.h comes from the desktop JDK and includes jni.h by name. Force-load
+# the NDK header first, then prevent that host JNI header from replacing the
+# Android target ABI. `${ANDROID_JNI_INCLUDE}` is an implicit compiler include
+# path, so it must be force-included rather than merely added as `-I`.
 target_compile_options(network_agent PRIVATE
+    "-include${ANDROID_JNI_INCLUDE}/jni.h"
     "-include${CMAKE_CURRENT_SOURCE_DIR}/include/android_jni_compat.h"
 )
 

@@ -70,7 +70,8 @@ function Build-AndroidAbi {
 
     $target = if ($Abi -eq 'arm64-v8a') { 'aarch64-none-linux-android26' } else { 'armv7a-none-linux-androideabi26' }
     $sysroot = Join-Path $AndroidNdkPath 'toolchains\llvm\prebuilt\windows-x86_64\sysroot'
-    $androidInclude = Join-Path $AndroidNdkPath 'sysroot\usr\include'
+    $androidInclude = Join-Path $sysroot 'usr\include'
+    $androidJniHeader = Join-Path $androidInclude 'jni.h'
     $compatHeader = Join-Path $scriptDir 'include\android_jni_compat.h'
     $objectDirectory = Join-Path $OutputDirectory 'manual-objects'
     New-Item -ItemType Directory -Path $objectDirectory -Force | Out-Null
@@ -93,6 +94,7 @@ function Build-AndroidAbi {
         '-DNDEBUG',
         '-fPIC',
         '-std=gnu++1z',
+        '-include', $androidJniHeader,
         '-include', $compatHeader,
         '-I', (Join-Path $scriptDir 'include'),
         '-I', $androidInclude,
