@@ -258,6 +258,7 @@ export function ScreenMirrorScreenshotPage(): React.JSX.Element {
             isStreaming={isStreaming}
             isAndroid={isAndroid}
             isH264={isH264}
+            displaySize={displaySize}
             imgRef={imgRef}
             canvasRef={canvasRef}
             onImageClick={handleImageClick}
