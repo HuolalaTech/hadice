@@ -7,6 +7,7 @@ interface ScreenMirrorViewProps {
   isAndroid: boolean
   isH264: boolean
   displaySize: { width: number; height: number } | null
+  availableSize: { width: number; height: number } | null
   rotationQuarterTurns: number
   imgRef: RefObject<HTMLImageElement | null>
   canvasRef: RefObject<HTMLCanvasElement | null>
@@ -27,6 +28,7 @@ export function ScreenMirrorView({
   isAndroid,
   isH264,
   displaySize,
+  availableSize,
   rotationQuarterTurns,
   imgRef,
   canvasRef,
@@ -41,7 +43,6 @@ export function ScreenMirrorView({
   onTouchCancel,
   onWheel
 }: ScreenMirrorViewProps): React.JSX.Element {
-  const containerRef = useRef<HTMLDivElement | null>(null)
   const frameRef = useRef<HTMLDivElement | null>(null)
   const dragRef = useRef<{
     edge: ResizeEdge
@@ -51,7 +52,6 @@ export function ScreenMirrorView({
     startHeight: number
   } | null>(null)
   const [preferredHeight, setPreferredHeight] = useState<number | null>(null)
-  const [maxFrameHeight, setMaxFrameHeight] = useState<number | null>(null)
 
   const aspectRatio = useMemo(() => {
     if (displaySize?.width && displaySize?.height) {
@@ -61,27 +61,9 @@ export function ScreenMirrorView({
   }, [displaySize])
 
   useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-
-    const updateMaximumSize = () => {
-      const { height } = container.getBoundingClientRect()
-      if (height > 0) {
-        setMaxFrameHeight(getMaximumFrameHeight(height, aspectRatio, rotationQuarterTurns))
-      }
-    }
-
-    updateMaximumSize()
-    const observer = new ResizeObserver(updateMaximumSize)
-    observer.observe(container)
-    return () => observer.disconnect()
-  }, [aspectRatio, rotationQuarterTurns])
-
-  useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
       const drag = dragRef.current
-      const container = containerRef.current
-      if (!drag || !container) return
+      if (!drag || !availableSize) return
 
       const deltaX = event.clientX - drag.startX
       const deltaY = event.clientY - drag.startY
@@ -111,9 +93,9 @@ export function ScreenMirrorView({
         scale = 1 + projectedDelta / startLength
       }
 
-      const bounds = container.getBoundingClientRect()
       const maximumHeight = getMaximumFrameHeight(
-        bounds.height,
+        availableSize.width,
+        availableSize.height,
         aspectRatio,
         rotationQuarterTurns
       )
@@ -139,7 +121,7 @@ export function ScreenMirrorView({
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
-  }, [aspectRatio, rotationQuarterTurns])
+  }, [aspectRatio, availableSize, rotationQuarterTurns])
 
   const startResize = useCallback((edge: ResizeEdge, event: React.PointerEvent<HTMLDivElement>) => {
     const frame = frameRef.current
@@ -159,18 +141,28 @@ export function ScreenMirrorView({
     document.body.style.userSelect = 'none'
   }, [rotationQuarterTurns])
 
+  const maxFrameHeight = availableSize
+    ? getMaximumFrameHeight(
+        availableSize.width,
+        availableSize.height,
+        aspectRatio,
+        rotationQuarterTurns
+      )
+    : null
+  const defaultHeight = aspectRatio <= 1
+    ? DEFAULT_FRAME_SHORT_EDGE / aspectRatio
+    : DEFAULT_FRAME_SHORT_EDGE
   const renderedHeight = maxFrameHeight === null
-    ? preferredHeight
-    : Math.min(preferredHeight ?? maxFrameHeight, maxFrameHeight)
-  const logicalWidth = renderedHeight === null ? null : renderedHeight * aspectRatio
+    ? defaultHeight
+    : Math.min(preferredHeight ?? defaultHeight, maxFrameHeight)
+  const logicalWidth = renderedHeight * aspectRatio
   const isSideways = rotationQuarterTurns % 2 === 1
-  const stageWidth = renderedHeight === null
-    ? MAX_FRAME_SHORT_EDGE
-    : isSideways ? renderedHeight : logicalWidth
+  const stageWidth = isSideways ? renderedHeight : logicalWidth
+  const stageHeight = isSideways ? logicalWidth : renderedHeight
   const frameTransform = getFrameTransform(
     rotationQuarterTurns,
-    logicalWidth ?? 0,
-    renderedHeight ?? 0
+    logicalWidth,
+    renderedHeight
   )
 
   const containerStyle: React.CSSProperties = {
@@ -193,18 +185,15 @@ export function ScreenMirrorView({
 
   return (
     <Card
-      ref={containerRef}
-      className="h-full overflow-visible bg-transparent border-0 shadow-none min-w-0 relative flex-shrink-0 p-0"
-      style={{ width: `${stageWidth}px` }}
+      className="overflow-visible bg-transparent border-0 shadow-none min-w-0 relative flex-shrink-0 p-0"
+      style={{ width: `${stageWidth}px`, height: `${stageHeight}px` }}
     >
       <div
         ref={frameRef}
         className="absolute left-0 top-0 flex items-center justify-center select-none border-2 border-dashed border-primary/50 rounded-lg shadow-lg"
         style={{
-          aspectRatio,
-          height: renderedHeight === null ? '100%' : `${renderedHeight}px`,
-          maxHeight: '100%',
-          maxWidth: '100%',
+          width: `${logicalWidth}px`,
+          height: `${renderedHeight}px`,
           userSelect: 'none',
           WebkitUserSelect: 'none',
           transform: frameTransform,
@@ -270,19 +259,18 @@ export function ScreenMirrorView({
 
 type ResizeEdge = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
 
-const MAX_FRAME_SHORT_EDGE = 400
+const DEFAULT_FRAME_SHORT_EDGE = 400
 
 function getMaximumFrameHeight(
-  containerHeight: number,
+  availableWidth: number,
+  availableHeight: number,
   aspectRatio: number,
   rotationQuarterTurns: number
 ): number {
-  const shortEdgeLimit = aspectRatio <= 1
-    ? MAX_FRAME_SHORT_EDGE / aspectRatio
-    : MAX_FRAME_SHORT_EDGE
   const isSideways = rotationQuarterTurns % 2 === 1
-  const verticalLimit = isSideways ? containerHeight / aspectRatio : containerHeight
-  return Math.max(0, Math.min(shortEdgeLimit, verticalLimit))
+  const widthLimit = isSideways ? availableWidth : availableWidth / aspectRatio
+  const heightLimit = isSideways ? availableHeight / aspectRatio : availableHeight
+  return Math.max(0, Math.min(widthLimit, heightLimit))
 }
 
 function getFrameTransform(rotationQuarterTurns: number, width: number, height: number): string {
