@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$Output,
-    [Parameter(Mandatory = $true)][string]$Arch
+    [Parameter(Mandatory = $true)][string]$Arch,
+    [string]$Dev = 'false'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -9,14 +10,43 @@ $outputDir = Split-Path -Parent $Output
 $binDir = Join-Path $outputDir 'bin'
 $resourcesDir = Join-Path $outputDir 'resources'
 
-# Rebuild bin/ from scratch so stale files from previous builds do not leak.
-if (Test-Path -LiteralPath $binDir) {
-    Remove-Item -LiteralPath $binDir -Recurse -Force
-}
-New-Item -ItemType Directory -Path $binDir -Force | Out-Null
 $assetBin = Join-Path (Join-Path (Get-Location) "assets\windows\$Arch") 'bin'
-if (Test-Path -LiteralPath $assetBin -PathType Container) {
-    Copy-Item -Path (Join-Path $assetBin '*') -Destination $binDir -Recurse -Force
+if ($Dev -eq 'true') {
+    # Wails dev restarts the app, but adb/hdc servers can outlive it and keep
+    # their executables locked. Leave identical binaries in place during reloads.
+    New-Item -ItemType Directory -Path $binDir -Force | Out-Null
+    if (Test-Path -LiteralPath $assetBin -PathType Container) {
+        foreach ($sourceFile in Get-ChildItem -LiteralPath $assetBin -Recurse -File) {
+            $relativePath = $sourceFile.FullName.Substring($assetBin.Length).TrimStart('\', '/')
+            $targetFile = Join-Path $binDir $relativePath
+            $targetDir = Split-Path -Parent $targetFile
+            New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+
+            if (Test-Path -LiteralPath $targetFile -PathType Leaf) {
+                $targetInfo = Get-Item -LiteralPath $targetFile
+                if ($sourceFile.Length -eq $targetInfo.Length -and
+                    (Get-FileHash -LiteralPath $sourceFile.FullName -Algorithm SHA256).Hash -eq
+                    (Get-FileHash -LiteralPath $targetFile -Algorithm SHA256).Hash) {
+                    continue
+                }
+            }
+
+            try {
+                Copy-Item -LiteralPath $sourceFile.FullName -Destination $targetFile -Force -ErrorAction Stop
+            } catch {
+                throw "Cannot update $targetFile. Stop the process using this binary and retry. $($_.Exception.Message)"
+            }
+        }
+    }
+} else {
+    # Release builds must not include stale files from an earlier build.
+    if (Test-Path -LiteralPath $binDir) {
+        Remove-Item -LiteralPath $binDir -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $binDir -Force | Out-Null
+    if (Test-Path -LiteralPath $assetBin -PathType Container) {
+        Copy-Item -Path (Join-Path $assetBin '*') -Destination $binDir -Recurse -Force
+    }
 }
 
 foreach ($abi in @('arm64-v8a', 'armeabi-v7a')) {

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 // ScreenshotInfo 截图信息
@@ -352,7 +353,8 @@ func ClearScreenshotHistory(savePath string) (int, error) {
 	return count, nil
 }
 
-// OpenScreenshotFolder 在文件管理器中打开截图目录
+// OpenScreenshotFolder 在系统文件管理器中打开截图目录。
+// 使用 Wails 的跨平台文件管理器接口，避免自行拼接 Explorer 命令。
 func OpenScreenshotFolder(ctx interface{}, savePath string) error {
 	targetDir := savePath
 	if targetDir == "" {
@@ -368,59 +370,17 @@ func OpenScreenshotFolder(ctx interface{}, savePath string) error {
 		return err
 	}
 
-	// 使用系统命令打开文件夹
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", targetDir)
-	case "windows":
-		cmd = exec.Command("explorer", targetDir)
-		// Windows 下隐藏命令窗口
-		HideWindowsConsoleWindow(cmd)
-	default:
-		cmd = exec.Command("xdg-open", targetDir)
-	}
-	return runOpenCommand(cmd)
+	return application.Get().Env.OpenFileManager(targetDir, false)
 }
 
-// OpenScreenshotFile 在文件管理器中打开截图文件并定位
+// OpenScreenshotFile 在系统文件管理器中打开截图文件并定位。
+// 使用 Wails 的跨平台文件管理器接口，避免自行拼接 Explorer 命令。
 func OpenScreenshotFile(ctx interface{}, filePath string) error {
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		return fmt.Errorf("文件不存在")
 	}
 
-	// 使用系统命令打开文件所在文件夹并定位文件
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", "-R", filePath)
-	case "windows":
-		// Explorer 要求 /select,<path> 作为一个参数；拆成两个参数会返回 exit status 1。
-		cmd = exec.Command("explorer", "/select,"+filePath)
-		// Windows 下隐藏命令窗口
-		HideWindowsConsoleWindow(cmd)
-	default:
-		dir := filepath.Dir(filePath)
-		cmd = exec.Command("xdg-open", dir)
-	}
-	return runOpenCommand(cmd)
-}
-
-// runOpenCommand 启动系统文件管理器。
-// Windows 的 explorer 可能复用已有进程并返回非零退出码，即使文件夹已成功打开，
-// 因此 Windows 下只检查进程是否能启动，不等待其退出状态。
-func runOpenCommand(cmd *exec.Cmd) error {
-	if runtime.GOOS != "windows" {
-		return cmd.Run()
-	}
-
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	go func() {
-		_ = cmd.Wait()
-	}()
-	return nil
+	return application.Get().Env.OpenFileManager(filePath, true)
 }
 
 // ReadImageAsBase64 读取本地图片文件并返回 base64 数据 URL

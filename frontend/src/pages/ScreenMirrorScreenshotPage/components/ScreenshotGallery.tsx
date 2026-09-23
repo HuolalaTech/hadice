@@ -12,6 +12,7 @@ interface ScreenshotGalleryProps {
   onView: (filePath: string) => void
   onOpen: (filePath: string) => void
   onCopy: (filePath: string) => void
+  onDelete: (item: ScreenshotHistoryItem) => Promise<boolean>
 }
 
 /**
@@ -24,7 +25,8 @@ export function ScreenshotGallery({
   imageDimensions,
   onView,
   onOpen,
-  onCopy
+  onCopy,
+  onDelete
 }: ScreenshotGalleryProps): React.JSX.Element {
   const galleryContainerRef = useRef<HTMLDivElement>(null)
   const [containerHeight, setContainerHeight] = React.useState<number>(0)
@@ -125,6 +127,7 @@ export function ScreenshotGallery({
                       onView={() => onView(item.localPath)}
                       onOpen={() => onOpen(item.localPath)}
                       onCopy={() => onCopy(item.localPath)}
+                      onDelete={() => onDelete(item)}
                     />
                   )
                 })}

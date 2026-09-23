@@ -4,8 +4,8 @@ import (
 	"Hadice/backend/adb"
 	"Hadice/backend/hdc"
 	"os"
-	"os/exec"
-	"runtime"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 // =============== 文件传输相关方法 ===============
@@ -181,46 +181,9 @@ func (a *App) GetUserDocumentsDirectory() (string, error) {
 
 // OpenFileInSystem 在系统文件管理器中打开文件或文件夹
 func (a *App) OpenFileInSystem(filePath string) (*hdc.HdcResult, error) {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		info, err := os.Stat(filePath)
-		if err == nil && !info.IsDir() {
-			cmd = exec.Command("open", "-R", filePath)
-		} else {
-			cmd = exec.Command("open", filePath)
-		}
-	case "windows":
-		info, err := os.Stat(filePath)
-		if err == nil && !info.IsDir() {
-			// Explorer 要求 /select,<path> 作为一个参数。
-			cmd = exec.Command("explorer", "/select,"+filePath)
-		} else {
-			cmd = exec.Command("explorer", filePath)
-		}
-		hdc.HideWindowsConsoleWindow(cmd)
-	default:
-		cmd = exec.Command("xdg-open", filePath)
-	}
-
-	// Explorer 可能复用已有进程并返回非零退出码；只要进程成功启动即可视为成功。
-	if runtime.GOOS == "windows" {
-		if err := cmd.Start(); err != nil {
-			return &hdc.HdcResult{
-				Success: false,
-				Error:   err.Error(),
-			}, err
-		}
-		go func() {
-			_ = cmd.Wait()
-		}()
-		return &hdc.HdcResult{
-			Success: true,
-			Output:  "文件已打开",
-		}, nil
-	}
-
-	err := cmd.Run()
+	info, statErr := os.Stat(filePath)
+	selectFile := statErr == nil && !info.IsDir()
+	err := application.Get().Env.OpenFileManager(filePath, selectFile)
 	if err != nil {
 		return &hdc.HdcResult{
 			Success: false,

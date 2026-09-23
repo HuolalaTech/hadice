@@ -21,8 +21,6 @@ import { ControlButtons } from './components/ControlButtons'
 import { ScreenshotGallery } from './components/ScreenshotGallery'
 import { SettingsDialog } from './components/SettingsDialog'
 import { PreviewDialog } from './components/PreviewDialog'
-import { DeleteDialog } from './components/DeleteDialog'
-import type { ScreenshotHistoryItem } from '@/types/hdc'
 import { WindowToggleButton } from '@/components/layout/WindowToggleButton'
 import { HelpToggleButton } from '@/components/layout/HelpToggleButton'
 import { NoDeviceState } from '@/components/layout/NoDeviceState'
@@ -66,11 +64,9 @@ export function ScreenMirrorScreenshotPage(): React.JSX.Element {
     return () => observer.disconnect()
   }, [selectedDevice])
 
-  // 预览和删除弹窗状态
+  // 预览弹窗状态
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false)
   const [previewImageData, setPreviewImageData] = useState<string>('')
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<ScreenshotHistoryItem | null>(null)
 
   // 保存路径管理
   const { savePath, customSavePath, setSavePath, setCustomSavePath, saveCustomPath } = useSavePath()
@@ -154,17 +150,6 @@ export function ScreenMirrorScreenshotPage(): React.JSX.Element {
       setPreviewDialogOpen(true)
     }
   }, [handleViewImage])
-
-  /**
-   * 处理删除截图
-   */
-  const handleDelete = useCallback(async () => {
-    if (deleteTarget) {
-      await handleDeleteScreenshot(deleteTarget)
-      setDeleteDialogOpen(false)
-      setDeleteTarget(null)
-    }
-  }, [deleteTarget, handleDeleteScreenshot])
 
   /**
    * 选择保存路径
@@ -322,6 +307,7 @@ export function ScreenMirrorScreenshotPage(): React.JSX.Element {
           onView={handleView}
           onOpen={handleOpenFile}
           onCopy={handleCopyImage}
+          onDelete={handleDeleteScreenshot}
         />
       </div>
 
@@ -354,18 +340,6 @@ export function ScreenMirrorScreenshotPage(): React.JSX.Element {
         imageData={previewImageData}
       />
 
-      {/* 删除确认弹窗 */}
-      <DeleteDialog
-        open={deleteDialogOpen}
-        onOpenChange={(open) => {
-          setDeleteDialogOpen(open)
-          if (!open) {
-            setDeleteTarget(null)
-          }
-        }}
-        target={deleteTarget}
-        onConfirm={handleDelete}
-      />
     </div>
   )
 }

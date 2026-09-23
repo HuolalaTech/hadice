@@ -24,6 +24,7 @@ import (
 	"Hadice/backend/hdc"
 	"Hadice/backend/hiprofiler"
 	applogger "Hadice/backend/logger"
+	"Hadice/backend/scrcpy"
 
 	"github.com/samber/lo"
 
@@ -103,7 +104,29 @@ func (a *AppService) ServiceShutdown() error {
 	if applogger.Sugar != nil {
 		applogger.Sugar.Info("[Backend] Application service shutting down")
 	}
+
+	// Stop every long-running child process before terminating the ADB/HDC
+	// servers. On Windows, a daemon can keep DLLs in the installation directory
+	// loaded after Hadice.exe exits, which prevents a subsequent installer from
+	// replacing the bundled binaries.
+	adb.StopAllLogcatStreams()
+	hdc.StopAllHilogStreams()
+	scrcpy.GetManager().StopAll()
+	if err := a.StopAllShells(); err != nil {
+		log.Printf("[Backend] Failed to stop shell processes during shutdown: %v", err)
+	}
+	android.StopAllAndroidCaptures("")
 	hiprofiler.StopAllCaptures("")
+
+	// adb and hdc may start persistent server processes. Stop them last, after
+	// all client sessions have released their connections. Timeouts ensure a
+	// disconnected device cannot indefinitely delay application shutdown.
+	if _, err := adb.ExecuteAdbWithTimeout([]string{"kill-server"}, 5*time.Second); err != nil {
+		log.Printf("[Backend] Failed to stop ADB server during shutdown: %v", err)
+	}
+	if _, err := hdc.ExecuteHdcWithTimeout([]string{"kill"}, 5*time.Second); err != nil {
+		log.Printf("[Backend] Failed to stop HDC server during shutdown: %v", err)
+	}
 	return nil
 }
 

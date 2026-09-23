@@ -54,6 +54,7 @@ tasks:
         vars:
           ARCH: '{{.ARCH}}'
           OUTPUT: '{{.OUTPUT}}'
+          DEV: '{{.DEV}}'
       - '{{if eq OS "windows"}}powershell.exe -NoProfile -Command "Remove-Item -Force *.syso -ErrorAction SilentlyContinue"{{else}}rm -f *.syso{{end}}'
     vars:
       BUILD_FLAGS: '{{if eq .DEV "true"}}-buildvcs=false -gcflags=all="-l"{{else}}-tags production -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui"{{end}}'
@@ -124,10 +125,11 @@ tasks:
     summary: Copies platform-specific binaries and Android agent to app directory
     internal: true
     cmds:
-      - '{{if eq OS "windows"}}powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./build/windows/copy_assets.ps1 -Output "{{.OUTPUT}}" -Arch "{{.ARCH}}"{{else}}bash ./build/windows/copy_assets.sh "{{.OUTPUT}}" "{{.ARCH}}"{{end}}'
+      - '{{if eq OS "windows"}}powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./build/windows/copy_assets.ps1 -Output "{{.OUTPUT}}" -Arch "{{.ARCH}}" -Dev "{{.DEV}}"{{else}}bash ./build/windows/copy_assets.sh "{{.OUTPUT}}" "{{.ARCH}}"{{end}}'
     vars:
       OUTPUT: '{{.OUTPUT}}'
       ARCH: '{{.ARCH | default ARCH}}'
+      DEV: '{{.DEV | default "false"}}'
 
   create:nsis:installer:
     summary: Creates an NSIS installer

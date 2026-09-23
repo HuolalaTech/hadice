@@ -260,6 +260,7 @@ export function useScreenshot(
         if (currentScreenshot?.localPath === target.localPath) {
           setCurrentScreenshot(null)
         }
+        setHistory((prev) => prev.filter((item) => item.localPath !== target.localPath))
         setImageCache((prev) => {
           const newCache = { ...prev }
           delete newCache[target.localPath]
@@ -270,7 +271,7 @@ export function useScreenshot(
           delete newDimensions[target.localPath]
           return newDimensions
         })
-        loadHistory()
+        await loadHistory()
         return true
       } else {
         toast.error(result.error || '删除失败')
