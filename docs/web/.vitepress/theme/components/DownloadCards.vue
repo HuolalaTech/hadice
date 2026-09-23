@@ -21,7 +21,8 @@ const failed = ref(false)
 const assets = reactive<Record<string, Asset | null>>({
   macArm: null,
   macIntel: null,
-  win: null,
+  winSetup: null,
+  winPortable: null,
 })
 
 const labels = computed(() =>
@@ -32,10 +33,13 @@ const labels = computed(() =>
         macTitle: 'macOS',
         armChip: 'Apple Silicon · arm64',
         intelChip: 'Intel · x64',
-        winTitle: 'Windows',
+        winSetupTitle: 'Windows installer',
+        winPortableTitle: 'Windows portable',
         winChip: 'x64',
+        portableChip: 'x64 · no installation',
         downloadDmg: 'Download DMG',
         downloadExe: 'Download EXE',
+        downloadZip: 'Download ZIP',
         checking: 'Checking latest release…',
         fallback: 'Open GitHub Releases',
         assetMissing: 'No matching asset found',
@@ -47,10 +51,13 @@ const labels = computed(() =>
         macTitle: 'macOS',
         armChip: 'Apple Silicon · arm64',
         intelChip: 'Intel · x64',
-        winTitle: 'Windows',
+        winSetupTitle: 'Windows 安装版',
+        winPortableTitle: 'Windows 免安装版',
         winChip: 'x64',
+        portableChip: 'x64 · 解压即用',
         downloadDmg: '下载 DMG',
         downloadExe: '下载 EXE',
+        downloadZip: '下载 ZIP',
         checking: '正在获取最新版本…',
         fallback: '打开 GitHub Releases',
         assetMissing: '未找到匹配的安装包',
@@ -58,14 +65,15 @@ const labels = computed(() =>
       }
 )
 
-function matchAsset(name: string, kind: 'macArm' | 'macIntel' | 'win'): boolean {
-  if (kind === 'macArm') {
-    return /\.dmg$/i.test(name) && /(mac-arm64|\.arm64\.|arm64)/i.test(name) && !/amd64|x64|x86_64|intel/i.test(name)
-  }
-  if (kind === 'macIntel') {
-    return /\.dmg$/i.test(name) && /(mac-amd64|mac-x64|mac-intel|\.amd64\.|x86_64|x64|intel)/i.test(name) && !/arm64/i.test(name)
-  }
-  return /\.exe$/i.test(name) && /(windows|win-)/i.test(name)
+type AssetKind = 'macArm' | 'macIntel' | 'winSetup' | 'winPortable'
+
+// Prefer the release naming convention; keep the older three names readable
+// until the first release with all four files has been published.
+const assetPatterns: Record<AssetKind, RegExp[]> = {
+  macArm: [/^Hadice-macos-arm64-v.+\.dmg$/i, /^Hadice-mac-arm64-v.+\.dmg$/i],
+  macIntel: [/^Hadice-macos-amd64-v.+\.dmg$/i, /^Hadice-mac-amd64-v.+\.dmg$/i],
+  winSetup: [/^Hadice-windows-amd64-setup-v.+\.exe$/i, /^Hadice-windows-amd64-v.+\.exe$/i],
+  winPortable: [/^Hadice-windows-amd64-portable-v.+\.zip$/i],
 }
 
 function formatSize(bytes: number): string {
@@ -80,19 +88,23 @@ async function fetchLatest() {
   try {
     const res = await fetch(API, {
       headers: { Accept: 'application/vnd.github+json' },
+      cache: 'no-store',
       signal: controller.signal,
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
     const list: Array<{ name: string; size: number; browser_download_url: string }> = Array.isArray(data.assets) ? data.assets : []
     version.value = data.tag_name || data.name || ''
-    const pick = (kind: 'macArm' | 'macIntel' | 'win') => {
-      const item = list.find((a) => matchAsset(a.name, kind))
+    const pick = (kind: AssetKind) => {
+      const item = assetPatterns[kind]
+        .map((pattern) => list.find((a) => pattern.test(a.name)))
+        .find(Boolean)
       return item ? { name: item.name, size: item.size, url: item.browser_download_url } : null
     }
     assets.macArm = pick('macArm')
     assets.macIntel = pick('macIntel')
-    assets.win = pick('win')
+    assets.winSetup = pick('winSetup')
+    assets.winPortable = pick('winPortable')
     failed.value = false
   } catch (err) {
     console.warn('[hadice] release fetch failed:', err)
@@ -132,7 +144,7 @@ onMounted(fetchLatest)
           <h2>{{ labels.macTitle }}</h2>
           <span class="download-card__chip">{{ labels.armChip }}</span>
         </div>
-        <p class="download-card__file">{{ assets.macArm?.name || labels.assetMissing }}</p>
+        <p class="download-card__file">{{ assets.macArm?.name || (loading ? labels.checking : labels.assetMissing) }}</p>
         <p class="download-card__size">{{ assets.macArm ? formatSize(assets.macArm.size) : '—' }}</p>
         <button class="VPButton medium brand" @click="open(assets.macArm)">{{ labels.downloadDmg }}</button>
       </article>
@@ -142,19 +154,29 @@ onMounted(fetchLatest)
           <h2>{{ labels.macTitle }}</h2>
           <span class="download-card__chip">{{ labels.intelChip }}</span>
         </div>
-        <p class="download-card__file">{{ assets.macIntel?.name || labels.assetMissing }}</p>
+        <p class="download-card__file">{{ assets.macIntel?.name || (loading ? labels.checking : labels.assetMissing) }}</p>
         <p class="download-card__size">{{ assets.macIntel ? formatSize(assets.macIntel.size) : '—' }}</p>
         <button class="VPButton medium brand" @click="open(assets.macIntel)">{{ labels.downloadDmg }}</button>
       </article>
 
       <article class="download-card">
         <div class="download-card__head">
-          <h2>{{ labels.winTitle }}</h2>
+          <h2>{{ labels.winSetupTitle }}</h2>
           <span class="download-card__chip">{{ labels.winChip }}</span>
         </div>
-        <p class="download-card__file">{{ assets.win?.name || labels.assetMissing }}</p>
-        <p class="download-card__size">{{ assets.win ? formatSize(assets.win.size) : '—' }}</p>
-        <button class="VPButton medium brand" @click="open(assets.win)">{{ labels.downloadExe }}</button>
+        <p class="download-card__file">{{ assets.winSetup?.name || (loading ? labels.checking : labels.assetMissing) }}</p>
+        <p class="download-card__size">{{ assets.winSetup ? formatSize(assets.winSetup.size) : '—' }}</p>
+        <button class="VPButton medium brand" @click="open(assets.winSetup)">{{ labels.downloadExe }}</button>
+      </article>
+
+      <article class="download-card">
+        <div class="download-card__head">
+          <h2>{{ labels.winPortableTitle }}</h2>
+          <span class="download-card__chip">{{ labels.portableChip }}</span>
+        </div>
+        <p class="download-card__file">{{ assets.winPortable?.name || (loading ? labels.checking : labels.assetMissing) }}</p>
+        <p class="download-card__size">{{ assets.winPortable ? formatSize(assets.winPortable.size) : '—' }}</p>
+        <button class="VPButton medium brand" @click="open(assets.winPortable)">{{ labels.downloadZip }}</button>
       </article>
     </div>
   </div>

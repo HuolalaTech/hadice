@@ -21,11 +21,15 @@ npm run docs:preview   # 预览构建产物
 下载页的 `DownloadCards` 组件实时读取 GitHub Releases：
 
 - 请求 `https://api.github.com/repos/HuolalaTech/hadice/releases/latest`
-- 按文件名匹配资产：macOS arm64 / x64 的 `.dmg`、Windows 的 `.exe`
+- 按文件名匹配四个资产：
+  - `Hadice-macos-arm64-v{version}.dmg`
+  - `Hadice-macos-amd64-v{version}.dmg`
+  - `Hadice-windows-amd64-setup-v{version}.exe`
+  - `Hadice-windows-amd64-portable-v{version}.zip`
 - 匹配成功：显示版本号、文件名、大小，按钮直连安装包
 - 读取失败或资产缺失：按钮自动跳转 `https://github.com/HuolalaTech/hadice/releases/latest`
 
-发布 Release 时请按上述命名规则上传安装包，下载页即可自动展示。
+发布 Release 时请从 `dist/macos-arm64/`、`dist/macos-amd64/` 和 `dist/windows/` 上传上述四个文件，下载页即可自动展示。ZIP 内含 `Hadice/Hadice.exe`、`Hadice/bin/` 与 `Hadice/resources/`，必须完整解压后运行。
 
 ## GitHub Pages 部署
 

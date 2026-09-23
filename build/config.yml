@@ -9,7 +9,7 @@ info:
   productIdentifier: "com.haivo.hadice"
   description: "安卓&鸿蒙调试工具"
   copyright: "(c) 2026, Haivo"
-  version: "2.3.0"
+  version: "2.3.1"
 
 
 # Dev mode configuration

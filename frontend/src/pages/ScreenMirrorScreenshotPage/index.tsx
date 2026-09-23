@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   Camera,
   Video,
@@ -21,8 +21,6 @@ import { ControlButtons } from './components/ControlButtons'
 import { ScreenshotGallery } from './components/ScreenshotGallery'
 import { SettingsDialog } from './components/SettingsDialog'
 import { PreviewDialog } from './components/PreviewDialog'
-import { DeleteDialog } from './components/DeleteDialog'
-import type { ScreenshotHistoryItem } from '@/types/hdc'
 import { WindowToggleButton } from '@/components/layout/WindowToggleButton'
 import { HelpToggleButton } from '@/components/layout/HelpToggleButton'
 import { NoDeviceState } from '@/components/layout/NoDeviceState'
@@ -37,12 +35,38 @@ export function ScreenMirrorScreenshotPage(): React.JSX.Element {
   const [format, setFormat] = useState<'jpeg' | 'png'>('jpeg')
   const [videoQuality, setVideoQuality] = useState<'0.2' | '0.3' | '0.4' | '0.5' | '0.6' | '0.7' | '0.8' | '0.9'>('0.9')
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
+  const [rotationQuarterTurns, setRotationQuarterTurns] = useState(0)
+  const mainContentRef = useRef<HTMLDivElement | null>(null)
+  const controlsRef = useRef<HTMLDivElement | null>(null)
+  const [mirrorAvailableSize, setMirrorAvailableSize] = useState<{
+    width: number
+    height: number
+  } | null>(null)
 
-  // 预览和删除弹窗状态
+  useEffect(() => {
+    const mainContent = mainContentRef.current
+    const controls = controlsRef.current
+    if (!mainContent || !controls) return
+
+    const updateAvailableSize = () => {
+      const mainBounds = mainContent.getBoundingClientRect()
+      const controlsBounds = controls.getBoundingClientRect()
+      setMirrorAvailableSize({
+        width: Math.max(0, mainBounds.width - controlsBounds.width - 4),
+        height: Math.max(0, mainBounds.height)
+      })
+    }
+
+    updateAvailableSize()
+    const observer = new ResizeObserver(updateAvailableSize)
+    observer.observe(mainContent)
+    observer.observe(controls)
+    return () => observer.disconnect()
+  }, [selectedDevice])
+
+  // 预览弹窗状态
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false)
   const [previewImageData, setPreviewImageData] = useState<string>('')
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<ScreenshotHistoryItem | null>(null)
 
   // 保存路径管理
   const { savePath, customSavePath, setSavePath, setCustomSavePath, saveCustomPath } = useSavePath()
@@ -97,8 +121,9 @@ export function ScreenMirrorScreenshotPage(): React.JSX.Element {
       createCoordinateConverter(
         isAndroid || isH264 ? canvasRef : imgRef,
         isAndroid ? null : displaySize,
+        rotationQuarterTurns,
       ),
-    [isAndroid, isH264, canvasRef, imgRef, displaySize],
+    [isAndroid, isH264, canvasRef, imgRef, displaySize, rotationQuarterTurns],
   )
 
   // 触摸事件处理
@@ -125,17 +150,6 @@ export function ScreenMirrorScreenshotPage(): React.JSX.Element {
       setPreviewDialogOpen(true)
     }
   }, [handleViewImage])
-
-  /**
-   * 处理删除截图
-   */
-  const handleDelete = useCallback(async () => {
-    if (deleteTarget) {
-      await handleDeleteScreenshot(deleteTarget)
-      setDeleteDialogOpen(false)
-      setDeleteTarget(null)
-    }
-  }, [deleteTarget, handleDeleteScreenshot])
 
   /**
    * 选择保存路径
@@ -251,13 +265,16 @@ export function ScreenMirrorScreenshotPage(): React.JSX.Element {
       )}
 
       {/* 主内容区 */}
-      <div className="flex-1 flex gap-1 min-h-0 overflow-hidden">
+      <div ref={mainContentRef} className="flex-1 flex gap-1 min-h-0 overflow-hidden">
         {/* 左侧：投屏显示区域和控制按钮 */}
-        <div className="flex gap-1 flex-shrink-0">
+        <div className="flex items-start gap-1 flex-shrink-0">
           <ScreenMirrorView
             isStreaming={isStreaming}
             isAndroid={isAndroid}
             isH264={isH264}
+            displaySize={displaySize}
+            availableSize={mirrorAvailableSize}
+            rotationQuarterTurns={rotationQuarterTurns}
             imgRef={imgRef}
             canvasRef={canvasRef}
             onImageClick={handleImageClick}
@@ -272,7 +289,13 @@ export function ScreenMirrorScreenshotPage(): React.JSX.Element {
             onWheel={handleWheel}
           />
 
-          <ControlButtons isStreaming={isStreaming} onAction={handleControlAction} />
+          <div ref={controlsRef}>
+            <ControlButtons
+              isStreaming={isStreaming}
+              onAction={handleControlAction}
+              onRotate={() => setRotationQuarterTurns((turns) => (turns + 1) % 4)}
+            />
+          </div>
         </div>
 
         {/* 右侧：图片画廊 */}
@@ -284,6 +307,7 @@ export function ScreenMirrorScreenshotPage(): React.JSX.Element {
           onView={handleView}
           onOpen={handleOpenFile}
           onCopy={handleCopyImage}
+          onDelete={handleDeleteScreenshot}
         />
       </div>
 
@@ -316,18 +340,6 @@ export function ScreenMirrorScreenshotPage(): React.JSX.Element {
         imageData={previewImageData}
       />
 
-      {/* 删除确认弹窗 */}
-      <DeleteDialog
-        open={deleteDialogOpen}
-        onOpenChange={(open) => {
-          setDeleteDialogOpen(open)
-          if (!open) {
-            setDeleteTarget(null)
-          }
-        }}
-        target={deleteTarget}
-        onConfirm={handleDelete}
-      />
     </div>
   )
 }

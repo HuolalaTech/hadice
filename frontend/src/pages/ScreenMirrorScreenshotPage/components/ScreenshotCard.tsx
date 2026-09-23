@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Maximize2, FileText, Copy, Image, Video } from 'lucide-react'
+import { Maximize2, FileText, Copy, Image, Video, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { ScreenshotHistoryItem } from '@/types/hdc'
 import { formatTimeShort } from '../utils/format'
@@ -12,6 +12,7 @@ interface ScreenshotCardProps {
   onView: () => void
   onOpen: () => void
   onCopy: () => void
+  onDelete: () => Promise<boolean>
 }
 
 /**
@@ -24,10 +25,22 @@ export function ScreenshotCard({
   width,
   onView,
   onOpen,
-  onCopy
+  onCopy,
+  onDelete
 }: ScreenshotCardProps): React.JSX.Element {
   const [isHovered, setIsHovered] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   const isVideo = item.fileName.endsWith('.mp4')
+
+  const handleDelete = async (): Promise<void> => {
+    if (isDeleting) return
+    setIsDeleting(true)
+    try {
+      await onDelete()
+    } finally {
+      setIsDeleting(false)
+    }
+  }
 
   return (
     <div
@@ -58,71 +71,60 @@ export function ScreenshotCard({
         )}
 
         {/* 悬停蒙层 */}
-        {isHovered && !isVideo && (
-          <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-3 transition-opacity">
+        {isHovered && (
+          <div className="absolute inset-0 bg-black/60 flex flex-col transition-opacity">
+            <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-3">
+              {!isVideo && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onView()
+                  }}
+                  className="gap-2 bg-white/20 hover:bg-white/30 text-white border-white/30"
+                >
+                  <Maximize2 className="h-4 w-4" />
+                  <span className="text-sm">放大查看</span>
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onOpen()
+                }}
+                className="gap-2 bg-white/20 hover:bg-white/30 text-white border-white/30"
+              >
+                <FileText className="h-4 w-4" />
+                <span className="text-sm">打开文件</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onCopy()
+                }}
+                className="gap-2 bg-white/20 hover:bg-white/30 text-white border-white/30"
+              >
+                <Copy className="h-4 w-4" />
+                <span className="text-sm">复制</span>
+              </Button>
+            </div>
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
+              disabled={isDeleting}
               onClick={(e) => {
                 e.stopPropagation()
-                onView()
+                void handleDelete()
               }}
-              className="gap-2 bg-white/20 hover:bg-white/30 text-white border-white/30"
+              className="w-full shrink-0 gap-2 rounded-none border-t border-white/20 text-red-300 hover:bg-red-500/15 hover:text-red-200"
             >
-              <Maximize2 className="h-4 w-4" />
-              <span className="text-sm">放大查看</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation()
-                onOpen()
-              }}
-              className="gap-2 bg-white/20 hover:bg-white/30 text-white border-white/30"
-            >
-              <FileText className="h-4 w-4" />
-              <span className="text-sm">打开文件</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation()
-                onCopy()
-              }}
-              className="gap-2 bg-white/20 hover:bg-white/30 text-white border-white/30"
-            >
-              <Copy className="h-4 w-4" />
-              <span className="text-sm">复制</span>
-            </Button>
-          </div>
-        )}
-        {isHovered && isVideo && (
-          <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-3 transition-opacity">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation()
-                onOpen()
-              }}
-              className="gap-2 bg-white/20 hover:bg-white/30 text-white border-white/30"
-            >
-              <FileText className="h-4 w-4" />
-              <span className="text-sm">打开文件</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation()
-                onCopy()
-              }}
-              className="gap-2 bg-white/20 hover:bg-white/30 text-white border-white/30"
-            >
-              <Copy className="h-4 w-4" />
-              <span className="text-sm">复制</span>
+              <Trash2 className="h-4 w-4" />
+              <span className="text-sm">{isDeleting ? '删除中...' : '删除文件'}</span>
             </Button>
           </div>
         )}

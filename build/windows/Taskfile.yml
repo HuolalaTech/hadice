@@ -54,6 +54,7 @@ tasks:
         vars:
           ARCH: '{{.ARCH}}'
           OUTPUT: '{{.OUTPUT}}'
+          DEV: '{{.DEV}}'
       - '{{if eq OS "windows"}}powershell.exe -NoProfile -Command "Remove-Item -Force *.syso -ErrorAction SilentlyContinue"{{else}}rm -f *.syso{{end}}'
     vars:
       BUILD_FLAGS: '{{if eq .DEV "true"}}-buildvcs=false -gcflags=all="-l"{{else}}-tags production -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui"{{end}}'
@@ -106,11 +107,38 @@ tasks:
           done | tr '\n' ' '
 
   package:
-    summary: Packages the application
+    summary: Packages the Windows installer and portable ZIP (or MSIX when requested)
     cmds:
-      - task: '{{if eq (.FORMAT | default "nsis") "msix"}}create:msix:package{{else}}create:nsis:installer{{end}}'
+      - task: '{{if eq (.FORMAT | default "nsis") "msix"}}create:msix:package{{else}}package:release{{end}}'
+        vars:
+          BIN_DIR: '{{.BIN_DIR}}'
+          ARCH: '{{.ARCH}}'
+          NSIS_OUTFILE: '{{.NSIS_OUTFILE}}'
     vars:
       FORMAT: '{{.FORMAT | default "nsis"}}'
+      BIN_DIR: 'dist/windows'
+      ARCH: '{{.ARCH | default "amd64"}}'
+      NSIS_OUTFILE: '{{.NSIS_OUTFILE | default (printf "../../../%s/%s-windows-%s-setup-v%s.exe" .BIN_DIR .APP_NAME .ARCH .APP_VERSION) }}'
+
+  package:release:
+    summary: Creates the Windows installer and portable ZIP from one build
+    internal: true
+    cmds:
+      - task: create:nsis:installer
+        vars:
+          BIN_DIR: '{{.BIN_DIR}}'
+          ARCH: '{{.ARCH}}'
+          NSIS_OUTFILE: '{{.NSIS_OUTFILE}}'
+      - task: create:portable:zip
+        vars:
+          BIN_DIR: '{{.BIN_DIR}}'
+          ARCH: '{{.ARCH}}'
+
+  create:portable:zip:
+    summary: Archives the self-contained Windows application directory
+    internal: true
+    cmds:
+      - go run ./build/scripts/package_portable.go -source "{{.BIN_DIR}}" -output "{{.BIN_DIR}}/{{.APP_NAME}}-windows-{{.ARCH}}-portable-v{{.APP_VERSION}}.zip"
 
   generate:syso:
     summary: Generates Windows `.syso` file
@@ -124,10 +152,11 @@ tasks:
     summary: Copies platform-specific binaries and Android agent to app directory
     internal: true
     cmds:
-      - '{{if eq OS "windows"}}powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./build/windows/copy_assets.ps1 -Output "{{.OUTPUT}}" -Arch "{{.ARCH}}"{{else}}bash ./build/windows/copy_assets.sh "{{.OUTPUT}}" "{{.ARCH}}"{{end}}'
+      - '{{if eq OS "windows"}}powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./build/windows/copy_assets.ps1 -Output "{{.OUTPUT}}" -Arch "{{.ARCH}}" -Dev "{{.DEV}}"{{else}}bash ./build/windows/copy_assets.sh "{{.OUTPUT}}" "{{.ARCH}}"{{end}}'
     vars:
       OUTPUT: '{{.OUTPUT}}'
       ARCH: '{{.ARCH | default ARCH}}'
+      DEV: '{{.DEV | default "false"}}'
 
   create:nsis:installer:
     summary: Creates an NSIS installer
@@ -142,9 +171,9 @@ tasks:
       - wails3 generate webview2bootstrapper -dir "{{.ROOT_DIR}}/build/windows/nsis"
       - |
         {{if eq OS "windows"}}
-        makensis -DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}\{{.BIN_DIR}}\{{.APP_NAME}}.exe" {{if .NSIS_OUTFILE}}-DOUTFILE="{{.NSIS_OUTFILE}}"{{end}} project.nsi
+        makensis -DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}\{{.BIN_DIR}}\{{.APP_NAME}}.exe" -DHADICE_BUNDLE_DIR="{{.ROOT_DIR}}\{{.BIN_DIR}}" {{if .NSIS_OUTFILE}}-DOUTFILE="{{.NSIS_OUTFILE}}"{{end}} project.nsi
         {{else}}
-        makensis -DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}.exe" {{if .NSIS_OUTFILE}}-DOUTFILE="{{.NSIS_OUTFILE}}"{{end}} project.nsi
+        makensis -DARG_WAILS_{{.ARG_FLAG}}_BINARY="{{.ROOT_DIR}}/{{.BIN_DIR}}/{{.APP_NAME}}.exe" -DHADICE_BUNDLE_DIR="{{.ROOT_DIR}}/{{.BIN_DIR}}" {{if .NSIS_OUTFILE}}-DOUTFILE="{{.NSIS_OUTFILE}}"{{end}} project.nsi
         {{end}}
     vars:
       BIN_DIR: '{{.BIN_DIR | default "bin"}}'

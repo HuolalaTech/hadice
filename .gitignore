@@ -4,12 +4,9 @@ frontend/dist
 dist/
 .task/
 bin/
-!assets/darwin/arm64/bin/
-!assets/darwin/arm64/bin/screen-mirror/
-!assets/darwin/arm64/bin/screen-mirror/*.so
-!assets/darwin/amd64/bin/
-!assets/darwin/amd64/bin/screen-mirror/
-!assets/darwin/amd64/bin/screen-mirror/*.so
+wails_windows_*.syso
+!assets/windows/*/bin/
+!assets/windows/*/bin/**
 .idea/
 /hadice-cli
 .codegraph/

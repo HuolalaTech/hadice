@@ -149,8 +149,8 @@ sudo xattr -dr com.apple.quarantine /Applications/Hadice.app
 
 ### Windows
 
-1. Download the exe installer from [GitHub Releases](../../releases).
-2. Follow the installer wizard. If SmartScreen warns about an unknown app, choose **Run anyway**.
+1. Download the Windows x64 installer EXE or portable ZIP from [GitHub Releases](../../releases).
+2. Run the installer wizard, or extract the ZIP and open `Hadice/Hadice.exe` while keeping `bin` and `resources` beside it. If SmartScreen warns about an unknown app, choose **Run anyway**.
 
 ---
 
@@ -232,13 +232,14 @@ task dev
 | `task build:windows:amd64` | Windows AMD64 |
 | `task build:cross` | Full cross-platform build |
 | `task package:macos:arm64` | Package macOS ARM64 DMG |
-| `task package:cross` | Package all platforms |
+| `task package:windows:amd64` | Package the Windows AMD64 installer |
+| `task package:cross` | Package both DMGs and the Windows installer and portable ZIP |
 | `task gen:version` | Generate `backend/version.go` from `build/config.yml` |
 | `task gen:cienv` | Bake `.env.ci` into `backend/cienv_generated.go` (never ship the file) |
 | `task clean` | Clean `bin/` and agent artifacts |
 | `task clean:dist` | Clean `dist/` |
 
-Output directory: `dist/{platform}-{arch}/`.
+Output directories: `dist/macos-{arch}/` for macOS and `dist/windows/` for Windows (app, resources, installer, and portable ZIP). All four release filenames include the platform, architecture, and version.
 
 ### Version
 

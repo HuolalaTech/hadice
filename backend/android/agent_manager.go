@@ -39,10 +39,10 @@ func (m *AgentManager) SetAgentPath(localPath string) {
 
 func GetDefaultAgentPathForABI(abi string) string {
 	exePath, err := os.Executable()
-	if err != nil {
-		return ""
+	exeDir := ""
+	if err == nil {
+		exeDir = filepath.Dir(exePath)
 	}
-	exeDir := filepath.Dir(exePath)
 	// macOS .app: .../Contents/MacOS -> .../Contents
 	contentsDir := filepath.Dir(exeDir)
 
@@ -58,7 +58,28 @@ func GetDefaultAgentPathForABI(abi string) string {
 		filepath.Join("agent", "build", abi, "libnetwork_agent.so"),
 	}
 
+	// wails3 dev 会在构建目录或临时目录运行可执行文件，工作目录并不保证是
+	// 项目根目录。向上查找 agent/build，确保开发模式能复用已构建的 agent。
+	searchRoots := []string{exeDir, contentsDir}
+	if workDir, workDirErr := os.Getwd(); workDirErr == nil {
+		searchRoots = append(searchRoots, workDir)
+	}
+	for _, root := range searchRoots {
+		for dir, depth := root, 0; dir != "" && depth < 6; dir, depth = filepath.Dir(dir), depth+1 {
+			candidate := filepath.Join(dir, "agent", "build", abi, "libnetwork_agent.so")
+			paths = append(paths, candidate)
+			if parent := filepath.Dir(dir); parent == dir {
+				break
+			}
+		}
+	}
+
+	checkedPaths := make(map[string]struct{}, len(paths))
 	for _, p := range paths {
+		if _, alreadyChecked := checkedPaths[p]; alreadyChecked {
+			continue
+		}
+		checkedPaths[p] = struct{}{}
 		if _, err := os.Stat(p); err == nil {
 			log.Printf("[AndroidAgent] Found agent at: %s", p)
 			return p

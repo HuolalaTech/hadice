@@ -20,6 +20,8 @@ func NewControlChannel(conn net.Conn) *ControlChannel {
 }
 
 func (c *ControlChannel) SetScreenSize(width, height uint16) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.screenWidth = width
 	c.screenHeight = height
 }

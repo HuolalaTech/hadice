@@ -145,8 +145,8 @@ sudo xattr -dr com.apple.quarantine /Applications/Hadice.app
 
 ### Windows
 
-1. 从 [GitHub Releases](../../releases) 下载exe安装包。
-2. 按安装向导完成安装即可。若 SmartScreen 提示未知应用，选择「仍要运行」.
+1. 从 [GitHub Releases](../../releases) 下载 Windows x64 安装版 EXE 或免安装版 ZIP。
+2. 安装版按向导完成安装；免安装版解压后打开 `Hadice` 文件夹，双击 `Hadice.exe`，并保留同目录的 `bin` 与 `resources`。若 SmartScreen 提示未知应用，选择「仍要运行」。
 
 ---
 
@@ -223,13 +223,14 @@ task dev
 | `task build:windows:amd64` | Windows AMD64 |
 | `task build:cross` | 跨平台全量构建 |
 | `task package:macos:arm64` | 打包 macOS ARM64 DMG |
-| `task package:cross` | 全平台打包 |
+| `task package:windows:amd64` | 打包 Windows AMD64 安装程序 |
+| `task package:cross` | 全平台打包（两个 DMG、Windows 安装版与免安装 ZIP） |
 | `task gen:version` | 从 `build/config.yml` 生成 `backend/version.go` |
 | `task gen:cienv` | 从 `.env.ci` 写入 `backend/cienv_generated.go`（**不**把 `.env.ci` 打进包） |
 | `task clean` | 清理 `bin/` 与 agent 产物 |
 | `task clean:dist` | 清理 `dist/` |
 
-产物目录：`dist/{platform}-{arch}/`。
+产物目录：macOS 位于 `dist/macos-{arch}/`，Windows 位于 `dist/windows/`（含程序、资源、安装版与免安装 ZIP）。四个发布文件名均包含平台、架构和版本号。
 
 ### 版本号
 
