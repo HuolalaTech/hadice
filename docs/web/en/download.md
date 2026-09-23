@@ -26,7 +26,7 @@ Enter your Mac login password and press Return.
 
 The app should now start normally.
 
-## Windows installation
+## Windows installer
 
 ### 1. Download the EXE installer
 
@@ -39,6 +39,12 @@ Follow the installer wizard to finish.
 ### 3. Handle the SmartScreen prompt
 
 If Windows warns about an unknown app, choose "Run anyway".
+
+## Windows portable ZIP
+
+Download the Windows x64 ZIP, extract it, open the `Hadice` folder, and double-click `Hadice.exe`. Keep the adjacent `bin` and `resources` folders: they contain the device tools and Android capture agents.
+
+The portable version uses the system WebView2 Runtime. If it is missing, install the runtime first or use the Windows installer above.
 
 > Having trouble downloading or installing?
 > [Open an issue on GitHub](https://github.com/HuolalaTech/hadice/issues)

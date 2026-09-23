@@ -10,6 +10,41 @@ $outputDir = Split-Path -Parent $Output
 $binDir = Join-Path $outputDir 'bin'
 $resourcesDir = Join-Path $outputDir 'resources'
 
+function Stop-BundledServer {
+    param(
+        [Parameter(Mandatory = $true)][string]$Executable,
+        [Parameter(Mandatory = $true)][string[]]$Arguments
+    )
+
+    if (-not (Test-Path -LiteralPath $Executable -PathType Leaf)) {
+        return
+    }
+
+    try {
+        # ADB/HDC servers can outlive Hadice and keep their executables locked.
+        & $Executable @Arguments 2>$null | Out-Null
+    } catch {
+        Write-Verbose "Unable to stop bundled server '$Executable': $_"
+    }
+}
+
+function Remove-DirectoryWithRetry {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $attempts = 10
+    for ($attempt = 1; $attempt -le $attempts; $attempt++) {
+        try {
+            Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+            return
+        } catch {
+            if ($attempt -eq $attempts) {
+                throw
+            }
+            Start-Sleep -Milliseconds 250
+        }
+    }
+}
+
 $assetBin = Join-Path (Join-Path (Get-Location) "assets\windows\$Arch") 'bin'
 if ($Dev -eq 'true') {
     # Wails dev restarts the app, but adb/hdc servers can outlive it and keep
@@ -41,7 +76,9 @@ if ($Dev -eq 'true') {
 } else {
     # Release builds must not include stale files from an earlier build.
     if (Test-Path -LiteralPath $binDir) {
-        Remove-Item -LiteralPath $binDir -Recurse -Force
+        Stop-BundledServer -Executable (Join-Path $binDir 'adb\adb.exe') -Arguments @('kill-server')
+        Stop-BundledServer -Executable (Join-Path $binDir 'hdc\hdc.exe') -Arguments @('kill')
+        Remove-DirectoryWithRetry -Path $binDir
     }
     New-Item -ItemType Directory -Path $binDir -Force | Out-Null
     if (Test-Path -LiteralPath $assetBin -PathType Container) {

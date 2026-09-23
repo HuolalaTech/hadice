@@ -94,9 +94,9 @@ tasks:
       - task: windows:build
         vars:
           ARCH: amd64
-          OUTPUT: '{{.DIST_DIR}}/windows-amd64/{{.APP_NAME}}.exe'
+          OUTPUT: '{{.DIST_DIR}}/windows/{{.APP_NAME}}.exe'
 
-  # Packaging tasks (creates .app bundles and DMGs)
+  # Packaging tasks (creates macOS DMGs and Windows installer/portable ZIP)
   package:cross:
     summary: Packages for all target platforms and architectures
     cmds:
@@ -109,7 +109,7 @@ tasks:
   package:macos:arm64:
     summary: Packages macOS ARM64 application with DMG
     cmds:
-      - task: build:agent
+      - task: build:macos:arm64
       - mkdir -p {{.DIST_DIR}}/macos-arm64/{{.APP_NAME}}.app/Contents/{MacOS,Resources}
       - cp build/darwin/icons.icns {{.DIST_DIR}}/macos-arm64/{{.APP_NAME}}.app/Contents/Resources
       - cp {{.DIST_DIR}}/macos-arm64/{{.APP_NAME}} {{.DIST_DIR}}/macos-arm64/{{.APP_NAME}}.app/Contents/MacOS
@@ -130,7 +130,7 @@ tasks:
         mkdir -p "$DMG_TMP_DIR"
         cp -R {{.DIST_DIR}}/macos-arm64/{{.APP_NAME}}.app "$DMG_TMP_DIR/"
         ln -s /Applications "$DMG_TMP_DIR/Applications"
-        DMG_FILENAME="{{.APP_NAME}}-mac-arm64-v{{.APP_VERSION}}.dmg"
+        DMG_FILENAME="{{.APP_NAME}}-macos-arm64-v{{.APP_VERSION}}.dmg"
         hdiutil create \
           -volname "{{.APP_NAME}}" \
           -srcfolder "$DMG_TMP_DIR" \
@@ -144,7 +144,7 @@ tasks:
   package:macos:amd64:
     summary: Packages macOS AMD64 application with DMG
     cmds:
-      - task: build:agent
+      - task: build:macos:amd64
       - mkdir -p {{.DIST_DIR}}/macos-amd64/{{.APP_NAME}}.app/Contents/{MacOS,Resources}
       - cp build/darwin/icons.icns {{.DIST_DIR}}/macos-amd64/{{.APP_NAME}}.app/Contents/Resources
       - cp {{.DIST_DIR}}/macos-amd64/{{.APP_NAME}} {{.DIST_DIR}}/macos-amd64/{{.APP_NAME}}.app/Contents/MacOS
@@ -165,7 +165,7 @@ tasks:
         mkdir -p "$DMG_TMP_DIR"
         cp -R {{.DIST_DIR}}/macos-amd64/{{.APP_NAME}}.app "$DMG_TMP_DIR/"
         ln -s /Applications "$DMG_TMP_DIR/Applications"
-        DMG_FILENAME="{{.APP_NAME}}-mac-amd64-v{{.APP_VERSION}}.dmg"
+        DMG_FILENAME="{{.APP_NAME}}-macos-amd64-v{{.APP_VERSION}}.dmg"
         hdiutil create \
           -volname "{{.APP_NAME}}" \
           -srcfolder "$DMG_TMP_DIR" \
@@ -177,14 +177,14 @@ tasks:
         echo "Created DMG: {{.DIST_DIR}}/macos-amd64/$DMG_FILENAME"
 
   package:windows:amd64:
-    summary: Packages Windows AMD64 application with NSIS installer
+    summary: Packages Windows AMD64 installer and portable ZIP
     cmds:
       - task: build:agent
-      - task: windows:create:nsis:installer
+      - task: windows:package
         vars:
-          BIN_DIR: '{{.DIST_DIR}}/windows-amd64'
+          BIN_DIR: '{{.DIST_DIR}}/windows'
           ARCH: amd64
-          NSIS_OUTFILE: '../../../{{.DIST_DIR}}/windows-amd64/{{.APP_NAME}}-windows-amd64-v{{.APP_VERSION}}.exe'
+          NSIS_OUTFILE: '../../../{{.DIST_DIR}}/windows/{{.APP_NAME}}-windows-amd64-setup-v{{.APP_VERSION}}.exe'
 
   gen:version:
     summary: Generates version file from build/config.yml

@@ -26,7 +26,7 @@ sudo xattr -dr com.apple.quarantine /Applications/Hadice.app
 
 即可正常启动。
 
-## Windows 安装
+## Windows 安装版
 
 ### 1. 下载 EXE 安装包
 
@@ -39,6 +39,12 @@ sudo xattr -dr com.apple.quarantine /Applications/Hadice.app
 ### 3. 处理 SmartScreen 提示
 
 若提示未知应用，选择「仍要运行」。
+
+## Windows 免安装版
+
+下载 Windows x64 ZIP，解压后打开其中的 `Hadice` 文件夹，双击 `Hadice.exe` 即可运行。请保留同目录的 `bin` 和 `resources` 文件夹；设备工具与 Android 抓包 Agent 都在其中。
+
+免安装版使用系统中的 WebView2 Runtime；如果电脑尚未安装，请先安装该运行时，或使用上方的 Windows 安装版。
 
 > 下载或安装遇到问题？
 > [到 GitHub 提 Issue](https://github.com/HuolalaTech/hadice/issues)

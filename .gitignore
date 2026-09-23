@@ -4,6 +4,7 @@ frontend/dist
 dist/
 .task/
 bin/
+wails_windows_*.syso
 !assets/windows/*/bin/
 !assets/windows/*/bin/**
 .idea/

@@ -4,7 +4,10 @@ import (
 	"embed"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
 	"runtime"
+	"syscall"
 
 	applogger "Hadice/backend/logger"
 
@@ -77,6 +80,17 @@ func Run(assets embed.FS) error {
 	if mainWindow == nil {
 		return fmt.Errorf("failed to create main window")
 	}
+
+	// Let terminal interrupts used by the dev runner enter Wails' normal
+	// shutdown path, so service cleanup can stop bundled ADB/HDC processes.
+	exitSignals := make(chan os.Signal, 1)
+	signal.Notify(exitSignals, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(exitSignals)
+	go func() {
+		sig := <-exitSignals
+		log.Printf("[Main] Received %s, quitting application", sig)
+		app.Quit()
+	}()
 
 	// 点击关闭按钮时直接退出整个程序
 	mainWindow.OnWindowEvent(events.Common.WindowClosing, func(event *application.WindowEvent) {

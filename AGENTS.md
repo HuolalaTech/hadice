@@ -32,7 +32,7 @@ task dev   # 先 build:agent，再 Wails 热重载
 | `task gen:cienv` | 从 `.env.ci` 生成 `backend/cienv_generated.go`（**不**把文件打进包） |
 | `task clean` / `task clean:dist` | 清理产物 |
 
-产物：`dist/{platform}-{arch}/`。
+产物：macOS 两个 DMG 在 `dist/macos-{arch}/`，Windows 安装版 EXE 与免安装 ZIP 在 `dist/windows/`；发布文件名含平台、架构、版本号。
 
 ## 版本
 

@@ -34,6 +34,10 @@ Unicode true
 ####
 !include "wails_tools.nsh"
 
+!ifndef HADICE_BUNDLE_DIR
+    !error "HADICE_BUNDLE_DIR must point to the directory containing Hadice.exe, bin, and resources"
+!endif
+
 # The version information for this two must consist of 4 parts
 VIProductVersion "${INFO_PRODUCTVERSION}.0"
 VIFileVersion    "${INFO_PRODUCTVERSION}.0"
@@ -92,12 +96,19 @@ Section
     
     !insertmacro wails.files
 
-    ; Install bin directory with hdc and other tools
+    ; Install the resources staged alongside Hadice.exe by copy:assets.
     SetOutPath "$INSTDIR\bin"
-    File /r "..\..\..\assets\windows\amd64\bin\*.*"
+    File /r "${HADICE_BUNDLE_DIR}\bin\*.*"
+
+    SetOutPath "$INSTDIR\resources"
+    File /r "${HADICE_BUNDLE_DIR}\resources\*.*"
+
+    SetOutPath $INSTDIR
+    File "${HADICE_BUNDLE_DIR}\NOTICE"
+    File "${HADICE_BUNDLE_DIR}\THIRD_PARTY_NOTICE"
+    File "${HADICE_BUNDLE_DIR}\LICENSE"
 
     ; Install icon file for shortcuts
-    SetOutPath $INSTDIR
     File "..\icon.ico"
 
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}" "" "$INSTDIR\icon.ico" 0
