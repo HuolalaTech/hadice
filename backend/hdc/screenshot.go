@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
@@ -470,52 +469,17 @@ func ExtractVideoFirstFrame(videoPath string) (string, error) {
 	return fmt.Sprintf("data:image/jpeg;base64,%s", base64Str), nil
 }
 
-// CopyFilePathToClipboard 复制文件路径到剪贴板（macOS Finder 风格）
+// CopyFilePathToClipboard 复制文件路径文本到剪贴板
 func CopyFilePathToClipboard(filePath string) error {
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		return fmt.Errorf("文件不存在")
 	}
 
-	// 根据操作系统使用不同的方法复制文件路径到剪贴板
-	switch runtime.GOOS {
-	case "darwin":
-		// macOS: 使用 osascript 调用 AppleScript 复制文件路径（Finder 风格）
-		script := fmt.Sprintf(`
-			set theFile to POSIX file "%s"
-			set the clipboard to theFile
-		`, filePath)
-		cmd := exec.Command("osascript", "-e", script)
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("复制文件路径到剪贴板失败: %v", err)
-		}
-		return nil
-	case "windows":
-		// Windows: 使用 PowerShell 复制文件路径
-		psScript := fmt.Sprintf(`
-			Add-Type -AssemblyName System.Windows.Forms
-			[System.Windows.Forms.Clipboard]::SetText('%s')
-		`, filePath)
-		cmd := exec.Command("powershell", "-Command", psScript)
-		// Windows 下隐藏命令窗口
-		HideWindowsConsoleWindow(cmd)
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("复制文件路径到剪贴板失败: %v", err)
-		}
-		return nil
-	default:
-		// Linux: 使用 xclip 或 xsel
-		cmd := exec.Command("xclip", "-selection", "clipboard")
-		cmd.Stdin = strings.NewReader(filePath)
-		if err := cmd.Run(); err != nil {
-			// 如果 xclip 失败，尝试 xsel
-			cmd2 := exec.Command("xsel", "--clipboard", "--input")
-			cmd2.Stdin = strings.NewReader(filePath)
-			if err2 := cmd2.Run(); err2 != nil {
-				return fmt.Errorf("复制文件路径到剪贴板失败: 需要安装 xclip 或 xsel")
-			}
-		}
-		return nil
+	app := application.Get()
+	if app == nil || app.Clipboard == nil || !app.Clipboard.SetText(filePath) {
+		return fmt.Errorf("复制文件路径到剪贴板失败")
 	}
+	return nil
 }
 
 // CopyImageToClipboard 复制图片到剪贴板
@@ -585,16 +549,12 @@ func SelectScreenshotPath(ctx interface{}) (string, error) {
 		return "", fmt.Errorf("context 不可用")
 	}
 
-	// 类型断言为 context.Context
-	ctxValue, ok := ctx.(context.Context)
-	if !ok {
-		return "", fmt.Errorf("context 类型错误")
-	}
-
-	// 使用 Wails runtime 打开文件夹选择对话框
-	selectedPath, err := wailsRuntime.OpenDirectoryDialog(ctxValue, wailsRuntime.OpenDialogOptions{
-		Title: "选择截图保存路径",
-	})
+	// 使用 Wails v3 的原生目录选择对话框
+	selectedPath, err := application.Get().Dialog.OpenFile().
+		SetTitle("选择截图保存路径").
+		CanChooseDirectories(true).
+		CanChooseFiles(false).
+		PromptForSingleSelection()
 	if err != nil {
 		return "", err
 	}

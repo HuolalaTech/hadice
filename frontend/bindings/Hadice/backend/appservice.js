@@ -1446,8 +1446,7 @@ export function OpenFolder(folderPath) {
 }
 
 /**
- * OpenLogFile 在系统日志查看器中打开日志文件
- * macOS 上使用 Console.app 打开，支持实时流读取
+ * OpenLogFile 在系统文件管理器中定位日志文件
  * @param {string} filePath
  * @returns {$CancellablePromise<{ [_ in string]?: any }>}
  */
@@ -1633,7 +1632,7 @@ export function RemovePortForward(localPort, devicePort) {
 }
 
 /**
- * ResizeShell 调整 Shell 终端大小
+ * ResizeShell adjusts the shell's terminal dimensions.
  * @param {string} shellId
  * @param {number} cols
  * @param {number} rows
@@ -1891,8 +1890,7 @@ export function StartServer() {
 }
 
 /**
- * StartShell 启动一个本地 Shell 终端
- * shellId: Shell 进程的唯一标识符
+ * StartShell starts a local command shell.
  * @param {string} shellId
  * @returns {$CancellablePromise<boolean>}
  */
@@ -1938,7 +1936,7 @@ export function StopAllLogcatStreams() {
 }
 
 /**
- * StopAllShells 停止所有 Shell 进程
+ * StopAllShells stops all shell sessions.
  * @returns {$CancellablePromise<void>}
  */
 export function StopAllShells() {
@@ -2095,7 +2093,7 @@ export function StopScreenRecord(connectKey) {
 }
 
 /**
- * StopShell 停止 Shell 进程
+ * StopShell stops one shell session.
  * @param {string} shellId
  * @returns {$CancellablePromise<void>}
  */
@@ -2223,7 +2221,7 @@ export function WaitForDevice(connectKey) {
 }
 
 /**
- * WriteToShell 向 Shell 写入数据
+ * WriteToShell writes input to a running shell.
  * @param {string} shellId
  * @param {string} data
  * @returns {$CancellablePromise<void>}

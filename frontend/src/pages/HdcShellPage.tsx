@@ -24,7 +24,7 @@ import '@xterm/xterm/css/xterm.css'
 
 /**
  * 终端命令页面
- * 使用 node-pty + xterm.js 实现真正的本地 shell 终端
+ * 使用平台 PTY（Windows ConPTY、Unix PTY）与 xterm.js 提供交互式本地终端
  */
 export function HdcShellPage(): React.JSX.Element {
 
@@ -196,25 +196,10 @@ export function HdcShellPage(): React.JSX.Element {
 
     // 先清理旧的事件监听器，防止内存泄漏
     cleanupEventListeners()
+    isShellRunningRef.current = true
 
     try {
-      const success = await window.hdc.startShell(shellIdRef.current)
-      if (!success) {
-        console.error('[HdcShell] Failed to start shell')
-        if (terminalInstanceRef.current && isMountedRef.current) {
-          terminalInstanceRef.current.writeln('\r\n\x1b[31m[错误] 无法启动终端进程\x1b[0m\r\n')
-        }
-        return
-      }
-
-      // 再次检查组件是否已卸载
-      if (!isMountedRef.current) {
-        return
-      }
-
-      isShellRunningRef.current = true
-
-      // 监听 shell 输出
+      // 先订阅事件，避免漏掉 cmd.exe / ConPTY 启动时立即输出的提示符。
       stdoutUnsubscribeRef.current = window.hdc.onShellStdout(shellIdRef.current, (data: string) => {
         if (terminalInstanceRef.current && isMountedRef.current) {
           terminalInstanceRef.current.write(data)
@@ -252,6 +237,30 @@ export function HdcShellPage(): React.JSX.Element {
         cleanupEventListeners()
       })
 
+      const success = await window.hdc.startShell(shellIdRef.current)
+      if (!success) {
+        isShellRunningRef.current = false
+        cleanupEventListeners()
+        console.error('[HdcShell] Failed to start shell')
+        if (terminalInstanceRef.current && isMountedRef.current) {
+          terminalInstanceRef.current.writeln('\r\n\x1b[31m[错误] 无法启动终端进程\x1b[0m\r\n')
+        }
+        return
+      }
+
+      // 若启动请求完成前页面已卸载，再清理一次，覆盖 StopShell 早于 StartShell 入表的情况。
+      if (!isMountedRef.current) {
+        await window.hdc.stopShell(shellIdRef.current).catch(() => undefined)
+        isShellRunningRef.current = false
+        cleanupEventListeners()
+        return
+      }
+
+      // shell 可能在启动请求返回前已经退出；退出监听器会将该状态置为 false。
+      if (!isShellRunningRef.current) {
+        return
+      }
+
       // 适配终端大小
       if (fitAddonRef.current && terminalInstanceRef.current) {
         setTimeout(() => {
@@ -269,6 +278,7 @@ export function HdcShellPage(): React.JSX.Element {
         }, 300)
       }
     } catch (error) {
+      isShellRunningRef.current = false
       console.error('[HdcShell] Error starting shell:', error)
       if (terminalInstanceRef.current && isMountedRef.current) {
         terminalInstanceRef.current.writeln(`\r\n\x1b[31m[错误] ${error instanceof Error ? error.message : String(error)}\x1b[0m\r\n`)

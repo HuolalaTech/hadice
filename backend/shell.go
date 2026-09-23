@@ -1,229 +1,195 @@
 package backend
 
 import (
-	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
-	gos "runtime"
+	runtime "runtime"
+	"strings"
 	"sync"
-	"time"
 
 	"Hadice/backend/hdc"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
-// shellTerminal 是本地 shell 的双向 I/O。Unix 使用真实 PTY，Windows 使用管道。
+// shellTerminal is a running platform shell session. Unix implementations use
+// a PTY and Windows uses ConPTY.
 type shellTerminal interface {
 	io.Reader
 	io.Writer
 	io.Closer
 	Resize(cols, rows uint16) error
+	PID() int
+	Wait() (int, error)
 }
 
-// ShellProcess 表示一个 Shell 进程
+type shellTerminalConfig struct {
+	Command string
+	Dir     string
+	Env     []string
+}
+
+// ShellProcess represents one local shell session.
 type ShellProcess struct {
 	ID       string
 	Pty      shellTerminal
-	Cmd      *exec.Cmd
-	ctx      context.Context
-	cancel   context.CancelFunc
 	mu       sync.Mutex
 	isClosed bool
+	close    sync.Once
 }
 
 var (
-	// activeShells 存储所有活跃的 Shell 进程
 	activeShells = make(map[string]*ShellProcess)
 	shellMutex   sync.RWMutex
 )
 
-// StartShell 启动一个本地 Shell 终端
-// shellId: Shell 进程的唯一标识符
+// StartShell starts a local command shell.
 func (a *App) StartShell(shellId string) (bool, error) {
 	shellMutex.Lock()
 	defer shellMutex.Unlock()
 
-	// 如果已有活跃的进程，先停止
 	if existing, ok := activeShells[shellId]; ok {
 		existing.stop()
 		delete(activeShells, shellId)
 	}
 
-	// 确定 shell 命令
-	var shellCommand string
-	var shellArgs []string
-
-	if gos.GOOS == "windows" {
-		// Windows 使用 cmd.exe
+	shellCommand := os.Getenv("SHELL")
+	if runtime.GOOS == "windows" {
 		shellCommand = os.Getenv("COMSPEC")
 		if shellCommand == "" {
 			shellCommand = "cmd.exe"
 		}
-		shellArgs = []string{}
-	} else {
-		// macOS/Linux 使用用户的默认 shell
-		shellCommand = os.Getenv("SHELL")
-		if shellCommand == "" {
-			shellCommand = "/bin/bash"
-		}
-		shellArgs = []string{}
+	} else if shellCommand == "" {
+		shellCommand = "/bin/bash"
 	}
 
-	// 获取 hdc 二进制文件所在目录
 	hdcBinDir := filepath.Dir(hdc.GetHdcPath())
-	libusbPath := hdc.GetLibusbPath()
-
-	// 构建环境变量
-	env := os.Environ()
-	pathSeparator := ":"
-	if gos.GOOS == "windows" {
-		pathSeparator = ";"
-	}
-
-	// 扩展 PATH 环境变量
 	pathEnv := os.Getenv("PATH")
 	if pathEnv != "" {
-		pathEnv = fmt.Sprintf("%s%s%s", hdcBinDir, pathSeparator, pathEnv)
+		pathEnv = hdcBinDir + string(os.PathListSeparator) + pathEnv
 	} else {
 		pathEnv = hdcBinDir
 	}
-	env = append(env, fmt.Sprintf("PATH=%s", pathEnv))
 
-	// 设置库路径（macOS/Linux）
-	if gos.GOOS != "windows" {
-		env = append(env, fmt.Sprintf("DYLD_LIBRARY_PATH=%s", libusbPath))
-		env = append(env, fmt.Sprintf("LD_LIBRARY_PATH=%s", libusbPath))
+	env := os.Environ()
+	env = setShellEnv(env, "PATH", pathEnv)
+	env = setShellEnv(env, "TERM", "xterm-256color")
+	if runtime.GOOS != "windows" {
+		libusbPath := hdc.GetLibusbPath()
+		env = setShellEnv(env, "DYLD_LIBRARY_PATH", libusbPath)
+		env = setShellEnv(env, "LD_LIBRARY_PATH", libusbPath)
 	}
 
-	// 设置终端类型
-	env = append(env, "TERM=xterm-256color")
-
-	// 创建命令
-	cmd := exec.Command(shellCommand, shellArgs...)
-	cmd.Env = env
-
-	// Windows 下隐藏子进程窗口，防止终端闪烁
-	if gos.GOOS == "windows" {
-		hdc.HideWindowsConsoleWindow(cmd)
-	}
-
-	// 获取用户主目录
 	homeDir, err := hdc.GetUserHomeDirectory()
-	if err != nil {
+	if err != nil || homeDir == "" {
 		homeDir = os.Getenv("HOME")
 		if homeDir == "" {
 			homeDir = os.Getenv("USERPROFILE")
 		}
 	}
-	cmd.Dir = homeDir
 
-	// 创建终端。Windows 不支持 creack/pty，因此由平台实现使用命令管道。
-	ptmx, err := startShellTerminal(cmd)
+	terminal, err := startShellTerminal(shellTerminalConfig{
+		Command: shellCommand,
+		Dir:     homeDir,
+		Env:     env,
+	})
 	if err != nil {
 		log.Printf("[Shell] Failed to start terminal for %s: %v", shellId, err)
-		return false, fmt.Errorf("failed to start terminal: %v", err)
+		return false, fmt.Errorf("failed to start terminal: %w", err)
 	}
 
-	// 设置初始大小
-	if err := ptmx.Resize(80, 24); err != nil {
+	if err := terminal.Resize(80, 24); err != nil {
 		log.Printf("[Shell] Failed to set initial terminal size for %s: %v", shellId, err)
 	}
 
-	// 创建上下文用于取消
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// 创建 ShellProcess
 	shellProcess := &ShellProcess{
-		ID:     shellId,
-		Pty:    ptmx,
-		Cmd:    cmd,
-		ctx:    ctx,
-		cancel: cancel,
+		ID:  shellId,
+		Pty: terminal,
 	}
-
-	// 存储进程
 	activeShells[shellId] = shellProcess
 
-	// 启动 goroutine 读取输出
-	go shellProcess.readOutput(a.ctx, shellId)
+	go shellProcess.readOutput(shellId)
+	go shellProcess.waitForExit(shellId)
 
-	// 启动 goroutine 等待进程退出
-	go shellProcess.waitForExit(a.ctx, shellId)
-
-	log.Printf("[Shell] Shell started successfully: %s (PID: %d)", shellId, cmd.Process.Pid)
-
-	// 等待一小段时间，确保 shell 完全启动
-	time.Sleep(200 * time.Millisecond)
-
+	log.Printf("[Shell] Shell started successfully: %s (PID: %d)", shellId, terminal.PID())
 	return true, nil
 }
 
-// WriteToShell 向 Shell 写入数据
+func setShellEnv(env []string, key, value string) []string {
+	for i, entry := range env {
+		separator := strings.IndexByte(entry, '=')
+		if separator <= 0 {
+			continue
+		}
+
+		name := entry[:separator]
+		matches := name == key
+		if runtime.GOOS == "windows" {
+			matches = strings.EqualFold(name, key)
+		}
+		if matches {
+			env[i] = key + "=" + value
+			return env
+		}
+	}
+	return append(env, key+"="+value)
+}
+
+// WriteToShell writes input to a running shell.
 func (a *App) WriteToShell(shellId string, data string) error {
 	shellMutex.RLock()
 	shellProcess, ok := activeShells[shellId]
 	shellMutex.RUnlock()
-
 	if !ok {
 		return fmt.Errorf("shell %s not found", shellId)
 	}
 
 	shellProcess.mu.Lock()
 	defer shellProcess.mu.Unlock()
-
 	if shellProcess.isClosed {
 		return fmt.Errorf("shell %s is closed", shellId)
 	}
 
-	_, err := shellProcess.Pty.Write([]byte(data))
-	if err != nil {
+	if _, err := shellProcess.Pty.Write([]byte(data)); err != nil {
 		log.Printf("[Shell] Failed to write to shell %s: %v", shellId, err)
-		return fmt.Errorf("failed to write to shell: %v", err)
+		return fmt.Errorf("failed to write to shell: %w", err)
 	}
-
 	return nil
 }
 
-// ResizeShell 调整 Shell 终端大小
+// ResizeShell adjusts the shell's terminal dimensions.
 func (a *App) ResizeShell(shellId string, cols int, rows int) error {
 	shellMutex.RLock()
 	shellProcess, ok := activeShells[shellId]
 	shellMutex.RUnlock()
-
 	if !ok {
 		return fmt.Errorf("shell %s not found", shellId)
 	}
 
 	shellProcess.mu.Lock()
 	defer shellProcess.mu.Unlock()
-
 	if shellProcess.isClosed {
 		return fmt.Errorf("shell %s is closed", shellId)
 	}
 
-	// 确保大小至少为 1x1
 	if cols < 1 {
 		cols = 1
 	}
 	if rows < 1 {
 		rows = 1
 	}
-
-	err := shellProcess.Pty.Resize(uint16(cols), uint16(rows))
-	if err != nil {
+	if err := shellProcess.Pty.Resize(uint16(cols), uint16(rows)); err != nil {
 		log.Printf("[Shell] Failed to resize shell %s: %v", shellId, err)
-		return fmt.Errorf("failed to resize shell: %v", err)
+		return fmt.Errorf("failed to resize shell: %w", err)
 	}
-
 	return nil
 }
 
-// StopShell 停止 Shell 进程
+// StopShell stops one shell session.
 func (a *App) StopShell(shellId string) error {
 	shellMutex.Lock()
 	defer shellMutex.Unlock()
@@ -235,12 +201,11 @@ func (a *App) StopShell(shellId string) error {
 
 	shellProcess.stop()
 	delete(activeShells, shellId)
-
 	log.Printf("[Shell] Shell stopped: %s", shellId)
 	return nil
 }
 
-// StopAllShells 停止所有 Shell 进程
+// StopAllShells stops all shell sessions.
 func (a *App) StopAllShells() error {
 	shellMutex.Lock()
 	defer shellMutex.Unlock()
@@ -249,97 +214,79 @@ func (a *App) StopAllShells() error {
 		shellProcess.stop()
 		log.Printf("[Shell] Shell stopped: %s", shellId)
 	}
-
 	activeShells = make(map[string]*ShellProcess)
 	log.Printf("[Shell] All shells stopped")
 	return nil
 }
 
-// readOutput 读取 Shell 输出并发送事件
-func (sp *ShellProcess) readOutput(ctx context.Context, shellId string) {
+func (sp *ShellProcess) readOutput(shellId string) {
 	buffer := make([]byte, 4096)
 	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
+		n, err := sp.Pty.Read(buffer)
+		if n > 0 {
+			app := application.Get()
+			if app != nil {
+				app.Event.Emit(fmt.Sprintf("shell:stdout:%s", shellId), string(buffer[:n]))
+			}
+		}
+		if err != nil {
 			sp.mu.Lock()
-			if sp.isClosed {
-				sp.mu.Unlock()
-				return
-			}
+			intentionallyClosed := sp.isClosed
 			sp.mu.Unlock()
-
-			n, err := sp.Pty.Read(buffer)
-			if err != nil {
-				if err != io.EOF {
-					log.Printf("[Shell] Error reading from shell %s: %v", shellId, err)
-				}
-				return
+			if !intentionallyClosed && !errors.Is(err, io.EOF) {
+				log.Printf("[Shell] Error reading from shell %s: %v", shellId, err)
 			}
-
-			if n > 0 {
-				data := string(buffer[:n])
-				// 发送 stdout 事件
-				app := application.Get()
-				if app != nil {
-					app.Event.Emit(fmt.Sprintf("shell:stdout:%s", shellId), data)
-				}
-			}
+			return
 		}
 	}
 }
 
-// waitForExit 等待 Shell 进程退出
-func (sp *ShellProcess) waitForExit(ctx context.Context, shellId string) {
-	err := sp.Cmd.Wait()
+func (sp *ShellProcess) waitForExit(shellId string) {
+	exitCode, err := sp.Pty.Wait()
+
+	sp.mu.Lock()
+	intentionallyClosed := sp.isClosed
+	sp.isClosed = true
+	sp.mu.Unlock()
+
+	sp.closeTerminal()
+	if intentionallyClosed {
+		return
+	}
 	if err != nil {
 		log.Printf("[Shell] Shell %s exited with error: %v", shellId, err)
 	}
 
-	exitCode := 0
-	signal := ""
-
-	if sp.Cmd.ProcessState != nil {
-		exitCode = sp.Cmd.ProcessState.ExitCode()
-		// 在 Unix 系统上，可以通过 ProcessState.Sys() 获取信号信息
-		// 这里简化处理
+	shellMutex.Lock()
+	if activeShells[shellId] == sp {
+		delete(activeShells, shellId)
 	}
+	shellMutex.Unlock()
 
-	sp.mu.Lock()
-	sp.isClosed = true
-	sp.mu.Unlock()
-
-	// 发送退出事件
 	app := application.Get()
 	if app != nil {
 		app.Event.Emit(fmt.Sprintf("shell:exit:%s", shellId), map[string]interface{}{
 			"code":   exitCode,
-			"signal": signal,
+			"signal": "",
 		})
 	}
-
-	// 清理资源
-	sp.stop()
 }
 
-// stop 停止 Shell 进程
 func (sp *ShellProcess) stop() {
 	sp.mu.Lock()
-	defer sp.mu.Unlock()
-
 	if sp.isClosed {
+		sp.mu.Unlock()
 		return
 	}
-
 	sp.isClosed = true
-	sp.cancel()
+	sp.mu.Unlock()
+	sp.closeTerminal()
+}
 
-	if sp.Cmd != nil && sp.Cmd.Process != nil {
-		sp.Cmd.Process.Kill()
-	}
-
-	if sp.Pty != nil {
-		sp.Pty.Close()
-	}
+func (sp *ShellProcess) closeTerminal() {
+	sp.close.Do(func() {
+		if sp.Pty != nil {
+			_ = sp.Pty.Close()
+		}
+	})
 }

@@ -11,6 +11,7 @@ import { captureEvent } from '@/lib/posthog'
 import { WindowToggleButton } from '@/components/layout/WindowToggleButton'
 import { HelpToggleButton } from '@/components/layout/HelpToggleButton'
 import { NoDeviceState } from '@/components/layout/NoDeviceState'
+import { copyTextToClipboard } from '@/lib/clipboard'
 
 /**
  * 系统信息页面
@@ -43,8 +44,8 @@ export function SystemInfoPage(): React.JSX.Element {
   }, [fetchData])
 
   // 复制属性
-  const handleCopy = (key: string, value: string) => {
-    navigator.clipboard.writeText(`${key}=${value}`)
+  const handleCopy = async (key: string, value: string) => {
+    if (!(await copyTextToClipboard(`${key}=${value}`))) return
     captureEvent('system info copied', { key })
     setCopiedKey(key)
     setTimeout(() => setCopiedKey(null), 2000)

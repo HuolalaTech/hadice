@@ -11,7 +11,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -1533,43 +1532,25 @@ func (a *App) GetLogFilePath() (string, error) {
 	return path, nil
 }
 
-// OpenLogFile 在系统日志查看器中打开日志文件
-// macOS 上使用 Console.app 打开，支持实时流读取
+// OpenLogFile 在系统文件管理器中定位日志文件
 func (a *App) OpenLogFile(filePath string) (map[string]interface{}, error) {
-	// 检查文件是否存在
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+	if _, err := os.Stat(filePath); err != nil {
+		message := "日志文件不存在"
+		if !os.IsNotExist(err) {
+			message = fmt.Sprintf("读取日志文件失败: %v", err)
+		}
 		return map[string]interface{}{
 			"success": false,
-			"error":   "日志文件不存在",
+			"error":   message,
 		}, nil
 	}
 
-	var cmd *exec.Cmd
-	if runtime.GOOS == "darwin" {
-		// macOS: 使用 Console.app 打开，支持实时流读取
-		cmd = exec.Command("open", "-a", "Console", filePath)
-	} else if runtime.GOOS == "windows" {
-		// Windows: 使用记事本打开
-		cmd = exec.Command("notepad", filePath)
-		// Windows 下隐藏命令窗口
-		hdc.HideWindowsConsoleWindow(cmd)
-	} else {
-		// Linux: 尝试使用 xdg-open
-		cmd = exec.Command("xdg-open", filePath)
-	}
-
-	err := cmd.Start()
-	if err != nil {
+	if err := application.Get().Env.OpenFileManager(filePath, true); err != nil {
 		return map[string]interface{}{
 			"success": false,
-			"error":   fmt.Sprintf("打开日志文件失败: %v", err),
+			"error":   fmt.Sprintf("在文件管理器中定位日志文件失败: %v", err),
 		}, nil
 	}
-
-	// 不等待命令完成（异步执行）
-	go func() {
-		_ = cmd.Wait()
-	}()
 
 	return map[string]interface{}{
 		"success": true,

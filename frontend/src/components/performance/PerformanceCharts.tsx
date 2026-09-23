@@ -18,6 +18,7 @@ import {
 } from 'recharts'
 import { Cpu, MemoryStick, Wifi, Monitor, Battery, HardDrive, Zap, Activity, AlertTriangle, HardDriveDownload, Loader2 } from 'lucide-react'
 import { formatBytes } from '@/lib/format'
+import { copyTextToClipboard } from '@/lib/clipboard'
 
 const TOOLTIP_STYLE = { backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '6px', fontSize: '10px', lineHeight: '14px', padding: '4px 6px' }
 import { ANIMATION_CONFIG } from '@/hooks/useChartAnimation'
@@ -749,11 +750,11 @@ export function FaultLogList({
     }
   }, [selectedDevice?.connectKey])
 
-  const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(detailText).then(() => {
+  const handleCopy = useCallback(async () => {
+    if (await copyTextToClipboard(detailText)) {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
-    })
+    }
   }, [detailText])
 
   return (

@@ -3,10 +3,10 @@ module Hadice
 go 1.24.0
 
 require (
+	github.com/UserExistsError/conpty v0.1.4
 	github.com/creack/pty v1.1.24
 	github.com/gorilla/websocket v1.5.3
 	github.com/samber/lo v1.49.1
-	github.com/wailsapp/wails/v2 v2.11.0
 	github.com/wailsapp/wails/v3 v3.0.0-alpha.49
 	go.uber.org/zap v1.27.1
 	google.golang.org/grpc v1.80.0
@@ -35,7 +35,6 @@ require (
 	github.com/jchv/go-winloader v0.0.0-20210711035445-715c2860da7e // indirect
 	github.com/kevinburke/ssh_config v1.2.0 // indirect
 	github.com/leaanthony/go-ansi-parser v1.6.1 // indirect
-	github.com/leaanthony/slicer v1.6.0 // indirect
 	github.com/leaanthony/u v1.1.1 // indirect
 	github.com/lmittmann/tint v1.0.7 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect

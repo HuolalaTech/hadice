@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { toast } from 'sonner'
+import { copyTextToClipboard } from '@/lib/clipboard'
 import { useDeviceStore } from '@/store/deviceStore'
 import type {
   DeviceDetailInfo,
@@ -77,7 +78,10 @@ function ProgressBar({
 function UdidDisplay({ udid }: { udid: string }) {
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(udid)
+      if (!(await copyTextToClipboard(udid))) {
+        toast.error('复制失败')
+        return
+      }
       captureEvent('device udid copied')
       toast.success('已复制UDID到剪贴板')
     } catch (error) {

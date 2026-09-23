@@ -4,6 +4,7 @@ import type { LogEntry } from '@/types/hdc';
 import type { FilterStats } from '@/workers/log-filter.worker';
 import { useLogViewStore } from '@/store/logViewStore';
 import { Checkbox } from '@/components/ui/checkbox';
+import { copyTextToClipboard } from '@/lib/clipboard';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -201,7 +202,7 @@ export const LogListView: React.FC<LogListViewProps> = React.memo(
       if (contextMenu === null) return;
       const entry = sortedEntries[contextMenu.index];
       if (entry) {
-        navigator.clipboard.writeText(entry.raw).catch(() => {});
+        void copyTextToClipboard(entry.raw);
       }
       setContextMenu(null);
     }, [contextMenu, sortedEntries]);
@@ -212,7 +213,7 @@ export const LogListView: React.FC<LogListViewProps> = React.memo(
         const entry = sortedEntries[contextMenu.index];
         if (entry) {
           const value = String(entry[field] ?? '');
-          navigator.clipboard.writeText(value).catch(() => {});
+          void copyTextToClipboard(value);
         }
         setContextMenu(null);
       },

@@ -3,70 +3,56 @@
 package backend
 
 import (
-	"os"
-	"os/exec"
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/UserExistsError/conpty"
 )
 
-// windowsShellTerminal 使用标准输入输出管道提供 cmd.exe 交互能力。
-// Windows 的 creack/pty 没有实现，因此不能调用 pty.Start。
 type windowsShellTerminal struct {
-	reader *os.File
-	writer *os.File
+	cpty *conpty.ConPty
 }
 
 func (t *windowsShellTerminal) Read(p []byte) (int, error) {
-	return t.reader.Read(p)
+	return t.cpty.Read(p)
 }
 
 func (t *windowsShellTerminal) Write(p []byte) (int, error) {
-	return t.writer.Write(p)
+	return t.cpty.Write(p)
 }
 
 func (t *windowsShellTerminal) Close() error {
-	readerErr := t.reader.Close()
-	writerErr := t.writer.Close()
-	if readerErr != nil {
-		return readerErr
-	}
-	return writerErr
+	return t.cpty.Close()
 }
 
-// 管道没有伪终端窗口，调整大小只能作为兼容操作忽略。
 func (t *windowsShellTerminal) Resize(cols, rows uint16) error {
-	return nil
+	return t.cpty.Resize(int(cols), int(rows))
 }
 
-func startShellTerminal(cmd *exec.Cmd) (shellTerminal, error) {
-	inputReader, inputWriter, err := os.Pipe()
+func (t *windowsShellTerminal) PID() int {
+	return t.cpty.Pid()
+}
+
+func (t *windowsShellTerminal) Wait() (int, error) {
+	code, err := t.cpty.Wait(context.Background())
+	return int(code), err
+}
+
+func startShellTerminal(config shellTerminalConfig) (shellTerminal, error) {
+	commandLine := config.Command
+	if !strings.HasPrefix(commandLine, `"`) {
+		commandLine = `"` + strings.ReplaceAll(commandLine, `"`, `\"`) + `"`
+	}
+
+	cpty, err := conpty.Start(
+		commandLine,
+		conpty.ConPtyDimensions(80, 24),
+		conpty.ConPtyWorkDir(config.Dir),
+		conpty.ConPtyEnv(config.Env),
+	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create ConPTY (requires Windows 10 version 1809 or Windows Server 2019 or newer): %w", err)
 	}
-
-	outputReader, outputWriter, err := os.Pipe()
-	if err != nil {
-		_ = inputReader.Close()
-		_ = inputWriter.Close()
-		return nil, err
-	}
-
-	cmd.Stdin = inputReader
-	cmd.Stdout = outputWriter
-	cmd.Stderr = outputWriter
-
-	if err := cmd.Start(); err != nil {
-		_ = inputReader.Close()
-		_ = inputWriter.Close()
-		_ = outputReader.Close()
-		_ = outputWriter.Close()
-		return nil, err
-	}
-
-	// 子进程已经继承这些句柄，父进程只保留终端两端。
-	_ = inputReader.Close()
-	_ = outputWriter.Close()
-
-	return &windowsShellTerminal{
-		reader: outputReader,
-		writer: inputWriter,
-	}, nil
+	return &windowsShellTerminal{cpty: cpty}, nil
 }
