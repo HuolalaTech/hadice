@@ -45,7 +45,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.1.17",
-    "@types/node": "^24.10.1",
+    "@types/node": "^26.6.3",
     "@types/react": "19.1.13",
     "@types/react-dom": "19.1.9",
     "@vitejs/plugin-react": "5.0.3",
