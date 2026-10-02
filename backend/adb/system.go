@@ -262,23 +262,31 @@ func GetNetworkInfo(connectKey string) ([]hdc.NetworkInfo, error) {
 	output := result.Output
 
 	interfaceRe := regexp.MustCompile(`^\d+:\s*(\w+):`)
-	inetRe := regexp.MustCompile(`inet\s+([\d.]+/\d+)\s+.*?\s+([\da-f:]+)`)
+	// MAC 地址位于接口块内的 link/ether 行，inet 行上只有 IP 与广播地址
+	etherRe := regexp.MustCompile(`link/ether\s+([\da-f:]+)`)
+	inetRe := regexp.MustCompile(`inet\s+([\d.]+/\d+)`)
 
 	var currentInterface string
+	var currentMac string
 	lines := strings.Split(output, "\n")
 
 	for _, line := range lines {
 		if match := interfaceRe.FindStringSubmatch(line); len(match) > 1 {
 			currentInterface = match[1]
+			currentMac = ""
+		}
+
+		if match := etherRe.FindStringSubmatch(line); len(match) > 1 {
+			currentMac = match[1]
 		}
 
 		if currentInterface != "" && (strings.HasPrefix(currentInterface, "wlan") ||
 			strings.HasPrefix(currentInterface, "eth") ||
 			strings.HasPrefix(currentInterface, "rmnet")) {
 
-			if match := inetRe.FindStringSubmatch(line); len(match) > 2 {
+			if match := inetRe.FindStringSubmatch(line); len(match) > 1 {
 				ipWithMask := match[1]
-				mac := match[2]
+				mac := currentMac
 
 				parts := strings.Split(ipWithMask, "/")
 				ip := parts[0]
