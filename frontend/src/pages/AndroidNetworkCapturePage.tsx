@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
-import { Smartphone, Play, Square, Trash2, Search, Download, Wand2 } from 'lucide-react'
+import { Smartphone, Play, Square, Trash2, Search, Wand2 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,6 +35,7 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
     setAutoScrollEnabled: storeSetAutoScrollEnabled,
     setSearchMatches: storeSetSearchMatches,
     setRequests: storeSetRequests,
+    clearRequests: storeClearRequests,
   } = useNetworkCaptureStore()
 
   const [leftPanelWidth, setLeftPanelWidth] = useState(45)
@@ -51,7 +52,7 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
 
   // 导出勾选状态（始终展示）
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [singleExportRequest, setSingleExportRequest] = useState<NetworkRequest | null>(null)
+  const [exportRequestsOverride, setExportRequestsOverride] = useState<NetworkRequest[] | null>(null)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
 
   const deviceId = selectedDevice?.connectKey || null
@@ -112,8 +113,8 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
   }, [])
 
   // 已选中的请求列表
-  const selectedRequests = requests.filter((r) => selectedIds.has(getRequestKey(r)))
-  const exportRequests = singleExportRequest ? [singleExportRequest] : selectedRequests
+  const selectedRequests = requests.filter((r) => !r.isSessionBoundary && selectedIds.has(getRequestKey(r)))
+  const exportRequests = exportRequestsOverride ?? selectedRequests
 
   // 切换单个请求选中状态
   const handleToggleSelect = useCallback((request: NetworkRequest) => {
@@ -161,33 +162,26 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
     })
   }, [requests, isFilterMode, searchQuery, searchMatches, selectedIds, getRequestKey])
 
-  // 点击导出按钮 → 始终打开弹窗
-  const handleExportClick = useCallback(() => {
-    setSingleExportRequest(null)
+  const handleExportRequests = useCallback((requestsToExport: NetworkRequest[]): void => {
+    setExportRequestsOverride(requestsToExport)
     setExportDialogOpen(true)
   }, [])
 
-  const handleExportSingleRequest = useCallback((request: NetworkRequest): void => {
-    setSelectedRequest(request)
-    setSingleExportRequest(request)
-    setExportDialogOpen(true)
-  }, [setSelectedRequest])
-
-  const handleDeleteSingleRequest = useCallback((request: NetworkRequest): void => {
+  const handleDeleteRequests = useCallback((requestsToDelete: NetworkRequest[]): void => {
     if (!deviceId) return
 
-    const key = getRequestKey(request)
-    const remaining = requests.filter((r) => getRequestKey(r) !== key)
+    const keys = new Set(requestsToDelete.map(getRequestKey))
+    const remaining = requests.filter((request) => !keys.has(getRequestKey(request)))
     storeSetRequests(deviceId, remaining)
     setSelectedIds((prev) => {
       const next = new Set(prev)
-      next.delete(key)
+      for (const key of keys) next.delete(key)
       return next
     })
-    if (selectedRequest && getRequestKey(selectedRequest) === key) {
+    if (selectedRequest && keys.has(getRequestKey(selectedRequest))) {
       storeSetSelectedRequest(deviceId, null)
     }
-    toast.success('已删除该请求')
+    toast.success(requestsToDelete.length > 1 ? `已删除 ${requestsToDelete.length} 个请求` : '已删除该请求')
   }, [deviceId, getRequestKey, requests, selectedRequest, storeSetRequests, storeSetSelectedRequest])
 
   const prettyJsonOrOriginal = useCallback((value?: string): string => {
@@ -702,25 +696,20 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
   const handleExportDialogOpenChange = useCallback((open: boolean): void => {
     setExportDialogOpen(open)
     if (!open) {
-      setSingleExportRequest(null)
+      setExportRequestsOverride(null)
     }
   }, [])
 
-  // 删除：清空已选请求
+  // 清空整个请求列表，包括设备断开等会话边界项。
   const handleClearRequests = useCallback((): void => {
     if (!deviceId) return
 
-    if (selectedIds.size === 0) {
-      toast.warning('请先在左侧请求列表前勾选想要删除的项')
-      return
-    }
-
     captureEvent('android capture cleared')
-    const remaining = requests.filter((r) => !selectedIds.has(getRequestKey(r)))
-    storeSetRequests(deviceId, remaining)
+    storeClearRequests(deviceId)
     setSelectedIds(new Set())
     storeSetSelectedRequest(deviceId, null)
-  }, [deviceId, selectedIds, requests, getRequestKey, storeSetRequests, storeSetSelectedRequest])
+    toast.success('已清空请求列表')
+  }, [deviceId, storeClearRequests, storeSetSelectedRequest])
 
   // 未选择设备或非安卓设备时的提示
   if (!selectedDevice || selectedDevice.platform !== 'android') {
@@ -845,16 +834,6 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
             <Trash2 className="h-4 w-4" />
           </Button>
 
-          {/* 导出按钮 — 始终可点击 */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExportClick}
-            className="gap-1.5"
-            title="导出网络请求"
-          >
-            <Download className="h-4 w-4" />
-          </Button>
         </div>
       </div>
 
@@ -875,8 +854,8 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
             selectedIds={selectedIds}
             onToggleSelect={handleToggleSelect}
             onToggleSelectAll={handleToggleSelectAll}
-            onExportRequest={handleExportSingleRequest}
-            onDeleteRequest={handleDeleteSingleRequest}
+            onExportRequests={handleExportRequests}
+            onDeleteRequests={handleDeleteRequests}
             onMockRequest={handleMockSingleRequest}
           />
         </Card>

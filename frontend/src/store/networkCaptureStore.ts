@@ -535,6 +535,8 @@ export const useNetworkCaptureStore = create<NetworkCaptureState>((set, get) => 
     newStates.set(deviceId, {
       ...state,
       requests: [],
+      selectedRequest: null,
+      searchMatches: new Map(),
       successCount: 0,
       errorCount: 0
     })

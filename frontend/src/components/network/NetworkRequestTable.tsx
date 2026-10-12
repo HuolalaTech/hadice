@@ -43,10 +43,10 @@ interface NetworkRequestTableProps {
   onToggleSelect?: (request: NetworkRequest) => void
   /** 全选/取消全选当前可见的请求 */
   onToggleSelectAll?: () => void
-  /** 右键菜单：导出单条请求 */
-  onExportRequest?: (request: NetworkRequest) => void
-  /** 右键菜单：删除单条请求 */
-  onDeleteRequest?: (request: NetworkRequest) => void
+  /** 右键菜单：导出一组请求 */
+  onExportRequests?: (requests: NetworkRequest[]) => void
+  /** 右键菜单：删除一组请求 */
+  onDeleteRequests?: (requests: NetworkRequest[]) => void
   /** 右键菜单：基于单条请求生成 mock */
   onMockRequest?: (request: NetworkRequest) => void
 }
@@ -221,6 +221,7 @@ interface RowProps {
   isRegexMode: boolean
   onSelect: (req: NetworkRequest) => void
   onToggleCheck: ((req: NetworkRequest) => void) | undefined
+  selectedRequestCount: number
   onExportRequest: ((req: NetworkRequest) => void) | undefined
   onDeleteRequest: ((req: NetworkRequest) => void) | undefined
   onMockRequest: ((req: NetworkRequest) => void) | undefined
@@ -228,7 +229,7 @@ interface RowProps {
 
 const MemoizedRow = React.memo(function MemoizedRow({
   rowData, rowHeight, showExportCheckboxes, searchQuery, isRegexMode,
-  onSelect, onToggleCheck, onExportRequest, onDeleteRequest, onMockRequest,
+  onSelect, onToggleCheck, selectedRequestCount, onExportRequest, onDeleteRequest, onMockRequest,
 }: RowProps): React.JSX.Element {
   if (rowData.type === 'boundary') {
     return (
@@ -326,15 +327,16 @@ const MemoizedRow = React.memo(function MemoizedRow({
       <ContextMenuContent className="w-40">
         {onExportRequest && (
           <ContextMenuItem onSelect={() => onExportRequest(rowData.request)}>
-            导出此请求
+            {selectedRequestCount > 1 ? `导出${selectedRequestCount}个请求` : '导出此请求'}
           </ContextMenuItem>
         )}
         {onDeleteRequest && (
           <ContextMenuItem onSelect={() => onDeleteRequest(rowData.request)}>
-            删除此请求
+            {selectedRequestCount > 1 ? `删除${selectedRequestCount}个请求` : '删除此请求'}
           </ContextMenuItem>
         )}
         {(onExportRequest || onDeleteRequest) && onMockRequest && <ContextMenuSeparator />}
+        {/* Mock always targets the row that opened this menu, independent of checkbox selection. */}
         {onMockRequest && (
           <ContextMenuItem onSelect={() => onMockRequest(rowData.request)}>
             mock此请求
@@ -352,6 +354,7 @@ const MemoizedRow = React.memo(function MemoizedRow({
   if (prev.onExportRequest !== next.onExportRequest) return false
   if (prev.onDeleteRequest !== next.onDeleteRequest) return false
   if (prev.onMockRequest !== next.onMockRequest) return false
+  if (prev.selectedRequestCount !== next.selectedRequestCount) return false
 
   // Compare only the fields that affect visual output
   const a = prev.rowData
@@ -385,7 +388,7 @@ export function NetworkRequestTable({
   autoScrollEnabled, setAutoScrollEnabled,
   showExportCheckboxes = false, selectedIds,
   onToggleSelect, onToggleSelectAll,
-  onExportRequest, onDeleteRequest, onMockRequest
+  onExportRequests, onDeleteRequests, onMockRequest
 }: NetworkRequestTableProps): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null)
   const prevCountRef = useRef(0)
@@ -412,6 +415,17 @@ export function NetworkRequestTable({
     allItems.map(item => buildRowData(item, selKey, selectedIds, searchMatches)),
     [allItems, selKey, selectedIds, searchMatches]
   )
+
+  const selectedRequests = useMemo(
+    () => requests.filter(request => !request.isSessionBoundary && selectedIds?.has(getRequestKey(request))),
+    [requests, selectedIds]
+  )
+  const handleExportRequest = useCallback((request: NetworkRequest) => {
+    onExportRequests?.(selectedRequests.length > 1 ? selectedRequests : [request])
+  }, [onExportRequests, selectedRequests])
+  const handleDeleteRequest = useCallback((request: NetworkRequest) => {
+    onDeleteRequests?.(selectedRequests.length > 1 ? selectedRequests : [request])
+  }, [onDeleteRequests, selectedRequests])
 
   // ---- Virtualizer -------------------------------------------------------
   const rowVirtualizer = useVirtualizer({
@@ -525,8 +539,9 @@ export function NetworkRequestTable({
                   isRegexMode={isRegexMode}
                   onSelect={handleSelect}
                   onToggleCheck={onToggleSelect}
-                  onExportRequest={onExportRequest}
-                  onDeleteRequest={onDeleteRequest}
+                  selectedRequestCount={selectedRequests.length}
+                  onExportRequest={onExportRequests ? handleExportRequest : undefined}
+                  onDeleteRequest={onDeleteRequests ? handleDeleteRequest : undefined}
                   onMockRequest={onMockRequest}
                 />
               </div>

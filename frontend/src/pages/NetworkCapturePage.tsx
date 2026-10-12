@@ -5,7 +5,6 @@ import {
   Play,
   Square,
   Loader2,
-  Download,
   Trash2,
   Search,
   Wand2
@@ -68,6 +67,7 @@ export function NetworkCapturePage(): React.JSX.Element {
     startCaptureListeners,
     stopCapture: storeStopCapture,
     setRequests: storeSetRequests,
+    clearRequests: storeClearRequests,
     setSearchQuery: storeSetSearchQuery,
     setIsRegexMode: storeSetIsRegexMode,
     setIsFilterMode: storeSetIsFilterMode,
@@ -94,7 +94,7 @@ export function NetworkCapturePage(): React.JSX.Element {
     isCapturing: false
   })
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [singleExportRequest, setSingleExportRequest] = useState<NetworkRequest | null>(null)
+  const [exportRequestsOverride, setExportRequestsOverride] = useState<NetworkRequest[] | null>(null)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   
   // Mock 配置
@@ -161,7 +161,7 @@ export function NetworkCapturePage(): React.JSX.Element {
   const selectedExportRequests = requests.filter(
     (request) => !request.isSessionBoundary && selectedIds.has(getNetworkRequestKey(request))
   )
-  const exportRequests = singleExportRequest ? [singleExportRequest] : selectedExportRequests
+  const exportRequests = exportRequestsOverride ?? selectedExportRequests
 
   /**
    * 获取心跳状态颜色
@@ -399,23 +399,33 @@ export function NetworkCapturePage(): React.JSX.Element {
     }
   }, [selectedDevice, storeStopCapture])
 
-  // 删除已勾选请求，与安卓抓包保持一致。
+  // 清空整个请求列表，包括设备断开等会话边界项。
   const handleClearRequests = useCallback((): void => {
     if (!selectedDevice) return
 
-    if (selectedIds.size === 0) {
-      toast.warning('请先在左侧请求列表前勾选想要删除的项')
-      return
-    }
-
-    captureEvent('network capture selected requests deleted')
-    const remaining = requests.filter(
-      (request) => !selectedIds.has(getNetworkRequestKey(request))
-    )
-    storeSetRequests(selectedDevice.connectKey, remaining)
+    captureEvent('network capture cleared')
+    storeClearRequests(selectedDevice.connectKey)
     storeSetSelectedRequest(selectedDevice.connectKey, null)
     setSelectedIds(new Set())
-  }, [requests, selectedDevice, selectedIds, storeSetRequests, storeSetSelectedRequest])
+    toast.success('已清空请求列表')
+  }, [selectedDevice, storeClearRequests, storeSetSelectedRequest])
+
+  const handleDeleteRequests = useCallback((requestsToDelete: NetworkRequest[]): void => {
+    if (!selectedDevice) return
+
+    const keys = new Set(requestsToDelete.map(getNetworkRequestKey))
+    const remaining = requests.filter((request) => !keys.has(getNetworkRequestKey(request)))
+    storeSetRequests(selectedDevice.connectKey, remaining)
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      for (const key of keys) next.delete(key)
+      return next
+    })
+    if (selectedRequest && keys.has(getNetworkRequestKey(selectedRequest))) {
+      storeSetSelectedRequest(selectedDevice.connectKey, null)
+    }
+    toast.success(requestsToDelete.length > 1 ? `已删除 ${requestsToDelete.length} 个请求` : '已删除该请求')
+  }, [requests, selectedDevice, selectedRequest, storeSetRequests, storeSetSelectedRequest])
 
   // ========== HiProfiler 模式的抓包处理 ==========
 
@@ -533,20 +543,14 @@ export function NetworkCapturePage(): React.JSX.Element {
     })
   }, [isFilterMode, requests, searchMatches, searchQuery, selectedIds])
 
-  const handleExportClick = useCallback((): void => {
-    setSingleExportRequest(null)
+  const handleExportRequests = useCallback((requestsToExport: NetworkRequest[]): void => {
+    setExportRequestsOverride(requestsToExport)
     setExportDialogOpen(true)
   }, [])
 
-  const handleExportSingleRequest = useCallback((request: NetworkRequest): void => {
-    setSelectedRequest(request)
-    setSingleExportRequest(request)
-    setExportDialogOpen(true)
-  }, [setSelectedRequest])
-
   const handleExportDialogOpenChange = useCallback((open: boolean): void => {
     setExportDialogOpen(open)
-    if (!open) setSingleExportRequest(null)
+    if (!open) setExportRequestsOverride(null)
   }, [])
 
   const prettyJsonOrOriginal = useCallback((value?: string): string => {
@@ -1054,17 +1058,8 @@ export function NetworkCapturePage(): React.JSX.Element {
               </Button>
             )
           )}
-          <Button variant="outline" size="sm" onClick={handleClearRequests} className="gap-2" title="删除已选请求">
+          <Button variant="outline" size="sm" onClick={handleClearRequests} className="gap-2" title="清空请求列表">
             <Trash2 className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExportClick}
-            className="gap-1.5"
-            title="导出网络请求"
-          >
-            <Download className="h-4 w-4" />
           </Button>
         </div>
       </div>
@@ -1087,7 +1082,8 @@ export function NetworkCapturePage(): React.JSX.Element {
             selectedIds={selectedIds}
             onToggleSelect={handleToggleExportSelect}
             onToggleSelectAll={handleToggleExportSelectAll}
-            onExportRequest={handleExportSingleRequest}
+            onExportRequests={handleExportRequests}
+            onDeleteRequests={handleDeleteRequests}
             onMockRequest={captureMode === 'sophon' ? handleMockSingleRequest : undefined}
           />
         </Card>
