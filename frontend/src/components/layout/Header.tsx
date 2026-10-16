@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, RefreshCw, Plug, Smartphone, Wifi, X } from 'lucide-react'
+import { Plus, Plug, Smartphone, Wifi, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -22,7 +22,7 @@ const WIRELESS_DEBUG_VALUE = '__wireless_debug__'
 
 /**
  * 顶部导航栏组件
- * 包含 Logo、设备选择器、连接诊断、刷新按钮
+ * 包含 Logo、设备选择器、连接诊断
  */
 export function Header(): React.JSX.Element {
   const [diagOpen, setDiagOpen] = useState(false)
@@ -60,6 +60,7 @@ export function Header(): React.JSX.Element {
 
   // 刷新设备列表（同时刷新鸿蒙和安卓设备）
   const handleRefresh = (): void => {
+    if (isRefreshing) return
     captureEvent('device list refreshed')
     refreshDevices()
   }
@@ -128,9 +129,13 @@ export function Header(): React.JSX.Element {
               <Select
                 value={selectedDevice?.connectKey || ''}
                 onValueChange={handleDeviceChange}
+                onOpenChange={(open) => {
+                  if (open) handleRefresh()
+                }}
                 disabled={isLoading}
               >
                 <SelectTrigger
+                  loading={isRefreshing || isLoading}
                   className={`w-auto min-w-[180px] max-w-[400px] h-9 ${
                     hasConnectedDevice
                       ? 'bg-secondary/50'
@@ -167,7 +172,7 @@ export function Header(): React.JSX.Element {
                 <SelectContent>
                   {devices.length === 0 && (
                     <SelectItem value="none" disabled>
-                      未发现设备
+                      {isRefreshing ? '加载中...' : '未发现设备'}
                     </SelectItem>
                   )}
                   {devices.length > 0 && (
@@ -234,18 +239,6 @@ export function Header(): React.JSX.Element {
               <Plug className="h-4 w-4" />
               <span>连接诊断</span>
             </Button>
-
-            {/* 刷新按钮 */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9"
-              onClick={handleRefresh}
-              disabled={isRefreshing || isLoading}
-            >
-              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            </Button>
-
           </div>
         </div>
       </header>

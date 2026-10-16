@@ -100,7 +100,7 @@ export function HelpDialog({ open, onOpenChange }: HelpDialogProps): React.JSX.E
                 <div>
                   <p className="font-medium text-foreground mb-2">3. 刷新设备</p>
                   <div className="pl-4 space-y-1">
-                    <p>• 在程序右上角点击"刷新"图标</p>
+                    <p>• 展开程序右上角的设备下拉框，自动刷新设备列表</p>
                     <p>• 在手机上点击"允许此电脑调试设备"</p>
                     <p>• 如有连接问题，可点击"连接诊断"进行排查</p>
                   </div>

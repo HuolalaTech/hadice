@@ -168,7 +168,7 @@ sudo xattr -dr com.apple.quarantine /Applications/Hadice.app
 
 3. Refresh devices
 
-   • Click the refresh icon in the top-right of the app
+   • Open the device dropdown in the top-right of the app to refresh the device list
 
    • On the phone, allow USB debugging for this computer
 

@@ -162,7 +162,7 @@ sudo xattr -dr com.apple.quarantine /Applications/Hadice.app
    将手机通过USB数据线连接到电脑
 3. 刷新设备
 
-   • 在程序右上角点击"刷新"图标
+   • 展开程序右上角的设备下拉框，自动刷新设备列表
 
    • 在手机上点击"允许此电脑调试设备"
 

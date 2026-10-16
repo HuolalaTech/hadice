@@ -51,7 +51,7 @@ export const helpContentMap: Record<MenuItemId, HelpContent> = {
     faqs: [
       {
         question: '为什么设备信息显示不完整？',
-        answer: '请确保设备已正确连接并授权调试。尝试拔插USB线并重新授权，然后点击刷新按钮。'
+        answer: '请确保设备已正确连接并授权调试。尝试拔插USB线并重新授权，然后展开右上角的设备下拉框刷新列表。'
       }
     ]
   },
