@@ -96,8 +96,7 @@ export function NetworkCapturePage(): React.JSX.Element {
     setIsFilterMode: storeSetIsFilterMode,
     setAutoScrollEnabled: storeSetAutoScrollEnabled,
     setSearchMatches: storeSetSearchMatches,
-    setSelectedRequest: storeSetSelectedRequest,
-    clearRequests: storeClearRequests
+    setSelectedRequest: storeSetSelectedRequest
   } = useNetworkCaptureStore()
 
   // 使用 selector hook 响应式订阅设备状态
