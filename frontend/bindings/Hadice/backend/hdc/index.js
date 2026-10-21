@@ -31,7 +31,8 @@ export {
     ProcessMemoryCategory,
     ProcessMemoryDetail,
     StorageInfo,
-    SystemRuntime
+    SystemRuntime,
+    WebViewPage
 } from "./models.js";
 
 import * as $models from "./models.js";

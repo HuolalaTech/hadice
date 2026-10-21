@@ -1394,6 +1394,19 @@ export function ListDevicesWithInfo() {
 }
 
 /**
+ * ListHarmonyWebViews 列出鸿蒙应用当前可调试的 WebView / ArkWeb 页面。
+ * @param {string} deviceId
+ * @param {number} pid
+ * @param {string} bundleName
+ * @returns {$CancellablePromise<hdc$0.WebViewPage[]>}
+ */
+export function ListHarmonyWebViews(deviceId, pid, bundleName) {
+    return $Call.ByID(1606387382, deviceId, pid, bundleName).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType84($result);
+    }));
+}
+
+/**
  * ListLocalDirectory 列出本地目录内容
  * @param {string} path
  * @returns {$CancellablePromise<{ [_ in string]?: any }>}
@@ -1410,7 +1423,7 @@ export function ListLocalDirectory(path) {
  */
 export function ListPortForwards() {
     return $Call.ByID(2913808025).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType84($result);
+        return $$createType86($result);
     }));
 }
 
@@ -1498,7 +1511,7 @@ export function OpenScreenshotFolder(savePath) {
  */
 export function ParseAppPackageInfo(filePath) {
     return $Call.ByID(389740578, filePath).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType86($result);
+        return $$createType88($result);
     }));
 }
 
@@ -1510,7 +1523,7 @@ export function ParseAppPackageInfo(filePath) {
  */
 export function ParseHapAppInfo(filePath) {
     return $Call.ByID(2383677915, filePath).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType86($result);
+        return $$createType88($result);
     }));
 }
 
@@ -2324,7 +2337,9 @@ const $$createType79 = device$0.Device.createFrom;
 const $$createType80 = $Create.Array($$createType79);
 const $$createType81 = hdc$0.HdcDevice.createFrom;
 const $$createType82 = $Create.Array($$createType81);
-const $$createType83 = $models.PortForwardItem.createFrom;
+const $$createType83 = hdc$0.WebViewPage.createFrom;
 const $$createType84 = $Create.Array($$createType83);
-const $$createType85 = hdc$0.InstallPackageInfo.createFrom;
-const $$createType86 = $Create.Nullable($$createType85);
+const $$createType85 = $models.PortForwardItem.createFrom;
+const $$createType86 = $Create.Array($$createType85);
+const $$createType87 = hdc$0.InstallPackageInfo.createFrom;
+const $$createType88 = $Create.Nullable($$createType87);

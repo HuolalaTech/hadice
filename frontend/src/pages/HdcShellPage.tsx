@@ -20,6 +20,8 @@ import { WindowToggleButton } from '@/components/layout/WindowToggleButton'
 import { HelpToggleButton } from '@/components/layout/HelpToggleButton'
 import { useCommandStore } from '@/store/commandStore'
 import { isHdcAvailable } from '@/lib/hdc'
+import { getTerminalTheme } from '@/lib/theme'
+import { useThemeStore } from '@/store/themeStore'
 import '@xterm/xterm/css/xterm.css'
 
 /**
@@ -47,6 +49,7 @@ export function HdcShellPage(): React.JSX.Element {
 
   // 快捷命令 store
   const { getAllCommands, removeCommand } = useCommandStore()
+  const theme = useThemeStore((s) => s.theme)
   
   // 获取所有命令（内置 + 自定义）
   const allCommands = useMemo(() => getAllCommands(), [getAllCommands])
@@ -63,28 +66,7 @@ export function HdcShellPage(): React.JSX.Element {
 
     // 创建终端实例
     const terminal = new Terminal({
-      theme: {
-        background: '#0a0a0b',
-        foreground: '#fafafa',
-        cursor: '#fafafa',
-        cursorAccent: '#0a0a0b',
-        black: '#000000',
-        red: '#ef4444',
-        green: '#22c55e',
-        yellow: '#eab308',
-        blue: '#3b82f6',
-        magenta: '#a855f7',
-        cyan: '#06b6d4',
-        white: '#fafafa',
-        brightBlack: '#525252',
-        brightRed: '#ef4444',
-        brightGreen: '#22c55e',
-        brightYellow: '#eab308',
-        brightBlue: '#3b82f6',
-        brightMagenta: '#a855f7',
-        brightCyan: '#06b6d4',
-        brightWhite: '#ffffff'
-      },
+      theme: getTerminalTheme(useThemeStore.getState().theme),
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
       fontSize: 13,
       lineHeight: 1.2,
@@ -169,6 +151,13 @@ export function HdcShellPage(): React.JSX.Element {
       fitAddonRef.current = null
     }
   }, [])
+
+  // 主题切换时更新终端配色（不重建 PTY）
+  useEffect(() => {
+    if (terminalInstanceRef.current) {
+      terminalInstanceRef.current.options.theme = getTerminalTheme(theme)
+    }
+  }, [theme])
 
   /**
    * 清理事件监听器

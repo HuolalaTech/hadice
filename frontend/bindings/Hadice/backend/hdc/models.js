@@ -1914,6 +1914,72 @@ export class SystemRuntime {
     }
 }
 
+/**
+ * WebViewPage Chromium DevTools /json 里的一个可调试页面目标。
+ */
+export class WebViewPage {
+    /**
+     * Creates a new WebViewPage instance.
+     * @param {Partial<WebViewPage>} [$$source = {}] - The source object to create the WebViewPage.
+     */
+    constructor($$source = {}) {
+        if (!("id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["id"] = "";
+        }
+        if (!("type" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["type"] = "";
+        }
+        if (!("url" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["url"] = "";
+        }
+        if (!("title" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["title"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["faviconUrl"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["webSocketDebuggerUrl"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new WebViewPage instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {WebViewPage}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new WebViewPage(/** @type {Partial<WebViewPage>} */($$parsedSource));
+    }
+}
+
 // Private type creation functions
 const $$createType0 = AppStats.createFrom;
 const $$createType1 = AppInfo.createFrom;

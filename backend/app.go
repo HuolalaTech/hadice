@@ -1907,6 +1907,11 @@ func (a *App) GetHiProfilerProcessStatus(deviceId string, processName string) (m
 	}, nil
 }
 
+// ListHarmonyWebViews 列出鸿蒙应用当前可调试的 WebView / ArkWeb 页面。
+func (a *App) ListHarmonyWebViews(deviceId string, pid int, bundleName string) ([]hdc.WebViewPage, error) {
+	return hdc.ListWebViews(deviceId, pid, bundleName)
+}
+
 // GetHadiceOutputDirectory 获取并创建 ~/Documents/Hadice 下的输出目录。
 func (a *App) GetHadiceOutputDirectory(subdir string) (string, error) {
 	if strings.TrimSpace(subdir) == "" {
