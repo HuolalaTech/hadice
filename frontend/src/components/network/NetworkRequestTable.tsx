@@ -1002,6 +1002,12 @@ export function NetworkRequestTable({
       </div>
 
       {/* Empty / virtualised body */}
+      {allItems.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center text-muted-foreground">
+          <div className="text-center">
+            <p className="text-sm">{isFilterMode && searchQuery.trim() ? '没有匹配的请求' : '暂无网络请求'}</p>
+            <p className="text-xs mt-1">{isFilterMode && searchQuery.trim() ? '请尝试其他搜索关键词' : '开始抓包后将显示网络请求列表'}</p>
+          </div>
         </div>
       ) : (
         <div
