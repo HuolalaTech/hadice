@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { toast } from 'sonner'
 import { Smartphone, Play, Square, Trash2, Search, Wand2 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
@@ -13,6 +13,7 @@ import { useMockStore } from '@/store/mockStore'
 import { ProcessSelect, type ProcessSelectHandle } from '@/components/android/ProcessSelect'
 import { NetworkRequestTable } from '@/components/network/NetworkRequestTable'
 import { NetworkRequestDetail } from '@/components/network/NetworkRequestDetail'
+import { WebViewPagesPanel } from '@/components/network/WebViewPagesPanel'
 import { ExportNetworkDialog } from '@/components/dialogs/ExportNetworkDialog'
 import { MockConfigDialog } from '@/components/dialogs/MockConfigDialog'
 import { WindowToggleButton } from '@/components/layout/WindowToggleButton'
@@ -20,6 +21,8 @@ import { HelpToggleButton } from '@/components/layout/HelpToggleButton'
 import { networkCaptureAPI } from '@/lib/hdc-api/network-capture'
 import { getNetworkRequestKey } from '@/lib/network-request-key'
 import type { NetworkRequest, AndroidCaptureStatus, AndroidApp, MockConfig, MockRule } from '@/types/hdc'
+
+type PanelView = 'requests' | 'webview'
 
 export function AndroidNetworkCapturePage(): React.JSX.Element {
   const { selectedDevice } = useDeviceStore()
@@ -40,6 +43,7 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
 
   const [leftPanelWidth, setLeftPanelWidth] = useState(45)
   const [isResizing, setIsResizing] = useState(false)
+  const [panelView, setPanelView] = useState<PanelView>('requests')
   const processSelectRef = useRef<ProcessSelectHandle>(null)
   const searchDebounceRef = useRef<NodeJS.Timeout | null>(null)
   const [mockConfigDialogOpen, setMockConfigDialogOpen] = useState(false)
@@ -701,6 +705,24 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
   }, [])
 
   // 清空整个请求列表，包括设备断开等会话边界项。
+  const webViewTarget = useMemo(
+    () =>
+      selectedApp
+        ? {
+            pid: selectedApp.pid,
+            packageName: selectedApp.packageName || selectedApp.processName || ''
+          }
+        : null,
+    [selectedApp]
+  )
+
+  const listAndroidWebViews = useCallback(
+    (id: string, pid: number, packageName: string) =>
+      networkCaptureAPI.ListAndroidWebViews(id, pid, packageName),
+    []
+  )
+
+  // 删除：清空已选请求
   const handleClearRequests = useCallback((): void => {
     if (!deviceId) return
 
@@ -805,6 +827,25 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
             disabled={captureStatus.isCapturing || captureStatus.waitingForRestart}
           />
 
+          <div className="flex items-center rounded-md border p-0.5">
+            <Button
+              variant={panelView === 'requests' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setPanelView('requests')}
+            >
+              请求
+            </Button>
+            <Button
+              variant={panelView === 'webview' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setPanelView('webview')}
+            >
+              网页
+            </Button>
+          </div>
+
           {/* Mock 配置 */}
           <Button
             variant="outline"
@@ -839,7 +880,14 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
           )}
 
           {/* 删除（清空请求） */}
-          <Button variant="outline" size="sm" onClick={handleClearRequests} className="gap-2" title="清空请求列表">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleClearRequests}
+            className="gap-2"
+            disabled={panelView === 'webview'}
+            title={panelView === 'webview' ? '网页视图不可删除请求' : '清空请求列表'}
+          >
             <Trash2 className="h-4 w-4" />
           </Button>
 
@@ -847,43 +895,59 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
       </div>
 
       {/* 主内容区 */}
-      <div id="android-capture-container" className="flex-1 flex min-h-0 relative gap-1">
-        <Card className="min-w-0 flex flex-col" style={{ width: `${leftPanelWidth}%` }}>
-          <NetworkRequestTable
-            requests={requests}
-            selectedRequest={selectedRequest}
-            onSelectRequest={setSelectedRequest}
-            searchQuery={searchQuery}
-            searchMatches={searchMatches}
-            isFilterMode={isFilterMode}
-            isRegexMode={isRegexMode}
-            autoScrollEnabled={autoScrollEnabled}
-            setAutoScrollEnabled={setAutoScrollEnabled}
-            onClearAll={handleClearAllRequests}
-            showExportCheckboxes
-            selectedIds={selectedIds}
-            onToggleSelect={handleToggleSelect}
-            onToggleSelectAll={handleToggleSelectAll}
-            onExportRequests={handleExportRequests}
-            onDeleteRequests={handleDeleteRequests}
-            onMockRequest={handleMockSingleRequest}
+      {panelView === 'webview' ? (
+        <Card className="flex-1 min-h-0 overflow-hidden">
+          <WebViewPagesPanel
+            deviceId={deviceId}
+            deviceLabel={
+              selectedDevice.displayName ||
+              selectedDevice.deviceName ||
+              selectedDevice.model ||
+              selectedDevice.connectKey
+            }
+            app={webViewTarget}
+            listPages={listAndroidWebViews}
           />
         </Card>
+      ) : (
+        <div id="android-capture-container" className="flex-1 flex min-h-0 relative gap-1">
+          <Card className="min-w-0 flex flex-col" style={{ width: `${leftPanelWidth}%` }}>
+            <NetworkRequestTable
+              requests={requests}
+              selectedRequest={selectedRequest}
+              onSelectRequest={setSelectedRequest}
+              searchQuery={searchQuery}
+              searchMatches={searchMatches}
+              isFilterMode={isFilterMode}
+              isRegexMode={isRegexMode}
+              autoScrollEnabled={autoScrollEnabled}
+              setAutoScrollEnabled={setAutoScrollEnabled}
+              onClearAll={handleClearAllRequests}
+              showExportCheckboxes
+              selectedIds={selectedIds}
+              onToggleSelect={handleToggleSelect}
+              onToggleSelectAll={handleToggleSelectAll}
+              onExportRequests={handleExportRequests}
+              onDeleteRequests={handleDeleteRequests}
+              onMockRequest={handleMockSingleRequest}
+            />
+          </Card>
 
-        <div
-          className="w-2 cursor-col-resize flex-shrink-0 z-10 hover:bg-primary/20 transition-colors"
-          onMouseDown={() => setIsResizing(true)}
-        />
-
-        <Card className="min-w-0 flex flex-col flex-1 overflow-hidden">
-          <NetworkRequestDetail
-            request={selectedRequest}
-            searchQuery={searchQuery}
-            searchMatches={searchMatches}
-            isRegexMode={isRegexMode}
+          <div
+            className="w-2 cursor-col-resize flex-shrink-0 z-10 hover:bg-primary/20 transition-colors"
+            onMouseDown={() => setIsResizing(true)}
           />
-        </Card>
-      </div>
+
+          <Card className="min-w-0 flex flex-col flex-1 overflow-hidden">
+            <NetworkRequestDetail
+              request={selectedRequest}
+              searchQuery={searchQuery}
+              searchMatches={searchMatches}
+              isRegexMode={isRegexMode}
+            />
+          </Card>
+        </div>
+      )}
 
       {/* 底部状态栏 */}
       <div className="mt-4 flex-shrink-0 flex items-center gap-4 text-xs text-muted-foreground">
