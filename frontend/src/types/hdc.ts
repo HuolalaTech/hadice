@@ -760,6 +760,16 @@ export interface HarmonyDebuggableApp {
   pid: number
 }
 
+/** 鸿蒙 WebView / ArkWeb 可调试页面（CDP /json） */
+export interface HarmonyWebViewPage {
+  id: string
+  type: string
+  url: string
+  title: string
+  faviconUrl?: string
+  webSocketDebuggerUrl?: string
+}
+
 /**
  * Android 设备信息
  */

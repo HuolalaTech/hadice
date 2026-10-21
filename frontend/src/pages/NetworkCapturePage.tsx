@@ -27,6 +27,7 @@ import { HelpToggleButton } from '@/components/layout/HelpToggleButton'
 import { NoDeviceState } from '@/components/layout/NoDeviceState'
 import { NetworkRequestDetail } from '@/components/network/NetworkRequestDetail'
 import { HarmonyProcessSelect } from '@/components/hiprofiler/HarmonyProcessSelect'
+import { HarmonyWebViewPanel } from '@/components/hiprofiler/HarmonyWebViewPanel'
 import { getNetworkRequestKey } from '@/lib/network-request-key'
 import { buildNetworkRequestUrl, escapeRegexLiteral } from '@/lib/network-url'
 import type {
@@ -41,20 +42,42 @@ import type {
 } from '@/types/hdc'
 import { networkCaptureAPI } from '@/lib/hdc-api/network-capture'
 
-  /**
-   * 格式化运行时间
-   */
-  function formatDuration(ms: number): string {
-    const seconds = Math.floor(ms / 1000)
-    const minutes = Math.floor(seconds / 60)
-    const hours = Math.floor(minutes / 60)
+type CaptureMode = 'sophon' | 'hiprofiler'
+type PanelView = 'requests' | 'webview'
 
-    const h = hours.toString().padStart(2, '0')
-    const m = (minutes % 60).toString().padStart(2, '0')
-    const s = (seconds % 60).toString().padStart(2, '0')
+const CAPTURE_MODE_STORAGE_KEY = 'network-capture-mode'
 
-    return `${h}:${m}:${s}`
+function loadCaptureMode(): CaptureMode {
+  try {
+    const value = localStorage.getItem(CAPTURE_MODE_STORAGE_KEY)
+    return value === 'sophon' || value === 'hiprofiler' ? value : 'hiprofiler'
+  } catch {
+    return 'hiprofiler'
   }
+}
+
+function saveCaptureMode(mode: CaptureMode): void {
+  try {
+    localStorage.setItem(CAPTURE_MODE_STORAGE_KEY, mode)
+  } catch (error) {
+    console.error('[NetworkCapturePage] 保存抓包模式失败:', error)
+  }
+}
+
+/**
+ * 格式化运行时间
+ */
+function formatDuration(ms: number): string {
+  const seconds = Math.floor(ms / 1000)
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+
+  const h = hours.toString().padStart(2, '0')
+  const m = (minutes % 60).toString().padStart(2, '0')
+  const s = (seconds % 60).toString().padStart(2, '0')
+
+  return `${h}:${m}:${s}`
+}
 
 /**
  * 网络请求页面
@@ -73,7 +96,8 @@ export function NetworkCapturePage(): React.JSX.Element {
     setIsFilterMode: storeSetIsFilterMode,
     setAutoScrollEnabled: storeSetAutoScrollEnabled,
     setSearchMatches: storeSetSearchMatches,
-    setSelectedRequest: storeSetSelectedRequest
+    setSelectedRequest: storeSetSelectedRequest,
+    clearRequests: storeClearRequests
   } = useNetworkCaptureStore()
 
   // 使用 selector hook 响应式订阅设备状态
@@ -87,8 +111,14 @@ export function NetworkCapturePage(): React.JSX.Element {
   const [devicePort, setDevicePort] = useState(35201)
   const [leftPanelWidth, setLeftPanelWidth] = useState(45) // 左侧面板宽度百分比，默认45:55
   const [isResizing, setIsResizing] = useState(false)
-  const [captureMode, setCaptureMode] = useState<'sophon' | 'hiprofiler'>('hiprofiler')
+  const [captureMode, setCaptureModeState] = useState<CaptureMode>(loadCaptureMode)
+  const setCaptureMode = useCallback((mode: CaptureMode) => {
+    setCaptureModeState(mode)
+    saveCaptureMode(mode)
+    if (mode !== 'hiprofiler') setPanelView('requests')
+  }, [])
   const [selectedHiProfilerApp, setSelectedHiProfilerApp] = useState<HarmonyDebuggableApp | null>(null)
+  const [panelView, setPanelView] = useState<PanelView>('requests')
   const [hiProfilerStatus, setHiProfilerStatus] = useState<HiProfilerCaptureStatus>({
     state: 'idle',
     isCapturing: false
@@ -426,6 +456,15 @@ export function NetworkCapturePage(): React.JSX.Element {
     }
     toast.success(requestsToDelete.length > 1 ? `已删除 ${requestsToDelete.length} 个请求` : '已删除该请求')
   }, [requests, selectedDevice, selectedRequest, storeSetRequests, storeSetSelectedRequest])
+
+  // 表头一键清屏：清空当前设备抓包面板全部数据
+  const handleClearAllRequests = useCallback((): void => {
+    if (!selectedDevice) return
+    captureEvent('network capture cleared all')
+    storeClearRequests(selectedDevice.connectKey)
+    storeSetSelectedRequest(selectedDevice.connectKey, null)
+    setSelectedIds(new Set())
+  }, [selectedDevice, storeClearRequests, storeSetSelectedRequest])
 
   // ========== HiProfiler 模式的抓包处理 ==========
 
@@ -925,7 +964,7 @@ export function NetworkCapturePage(): React.JSX.Element {
           {/* 模式切换 */}
           <Select
             value={captureMode}
-            onValueChange={(v) => setCaptureMode(v as 'sophon' | 'hiprofiler')}
+            onValueChange={(v) => setCaptureMode(v as CaptureMode)}
             disabled={isHiProfilerActive}
           >
             <SelectTrigger className="w-[130px] h-9">
@@ -979,14 +1018,34 @@ export function NetworkCapturePage(): React.JSX.Element {
             </div>
           </div>
 
-          {/* HiProfiler 模式：进程选择器 */}
+          {/* HiProfiler 模式：进程选择器 + 请求/网页切换 */}
           {captureMode === 'hiprofiler' && (
-            <HarmonyProcessSelect
-              deviceId={selectedDevice.connectKey}
-              value={selectedHiProfilerApp}
-              onChange={setSelectedHiProfilerApp}
-              disabled={isHiProfilerActive}
-            />
+            <>
+              <HarmonyProcessSelect
+                deviceId={selectedDevice.connectKey}
+                value={selectedHiProfilerApp}
+                onChange={setSelectedHiProfilerApp}
+                disabled={isHiProfilerActive}
+              />
+              <div className="flex items-center rounded-md border p-0.5">
+                <Button
+                  variant={panelView === 'requests' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setPanelView('requests')}
+                >
+                  请求
+                </Button>
+                <Button
+                  variant={panelView === 'webview' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setPanelView('webview')}
+                >
+                  网页
+                </Button>
+              </div>
+            </>
           )}
 
           {/* Sophon 模式：Mock 按钮 */}
@@ -1058,52 +1117,69 @@ export function NetworkCapturePage(): React.JSX.Element {
               </Button>
             )
           )}
-          <Button variant="outline" size="sm" onClick={handleClearRequests} className="gap-2" title="清空请求列表">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleClearRequests}
+            className="gap-2"
+            disabled={panelView === 'webview'}
+            title={panelView === 'webview' ? '网页视图不可删除请求' : '删除已选请求'}
+          >
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
-      {/* 主内容区 - 左右布局 */}
-      <div ref={containerRef} className="flex-1 flex min-h-0 relative gap-1">
-        {/* 左侧：请求列表 */}
-        <Card className="min-w-0 flex flex-col" style={{ width: `${leftPanelWidth}%` }}>
-          <NetworkRequestTable
-            requests={requests}
-            selectedRequest={selectedRequest}
-            onSelectRequest={setSelectedRequest}
-            searchQuery={searchQuery}
-            searchMatches={searchMatches}
-            isFilterMode={isFilterMode}
-            isRegexMode={isRegexMode}
-            autoScrollEnabled={autoScrollEnabled}
-            setAutoScrollEnabled={setAutoScrollEnabled}
-            showExportCheckboxes
-            selectedIds={selectedIds}
-            onToggleSelect={handleToggleExportSelect}
-            onToggleSelectAll={handleToggleExportSelectAll}
-            onExportRequests={handleExportRequests}
-            onDeleteRequests={handleDeleteRequests}
-            onMockRequest={captureMode === 'sophon' ? handleMockSingleRequest : undefined}
+      {/* 主内容区 */}
+      {captureMode === 'hiprofiler' && panelView === 'webview' ? (
+        <Card className="flex-1 min-h-0 overflow-hidden">
+          <HarmonyWebViewPanel
+            deviceId={selectedDevice.connectKey}
+            app={selectedHiProfilerApp}
           />
         </Card>
+      ) : (
+        <div ref={containerRef} className="flex-1 flex min-h-0 relative gap-1">
+          {/* 左侧：请求列表 */}
+          <Card className="min-w-0 flex flex-col" style={{ width: `${leftPanelWidth}%` }}>
+            <NetworkRequestTable
+              requests={requests}
+              selectedRequest={selectedRequest}
+              onSelectRequest={setSelectedRequest}
+              searchQuery={searchQuery}
+              searchMatches={searchMatches}
+              isFilterMode={isFilterMode}
+              isRegexMode={isRegexMode}
+              autoScrollEnabled={autoScrollEnabled}
+              setAutoScrollEnabled={setAutoScrollEnabled}
+              onClearAll={handleClearAllRequests}
+              showExportCheckboxes
+              selectedIds={selectedIds}
+              onToggleSelect={handleToggleExportSelect}
+              onToggleSelectAll={handleToggleExportSelectAll}
+              onExportRequests={handleExportRequests}
+              onDeleteRequests={handleDeleteRequests}
+              onMockRequest={captureMode === 'sophon' ? handleMockSingleRequest : undefined}
+            />
+          </Card>
 
-        {/* 拖动区域 - 空白区域，鼠标悬停时变化 */}
-        <div
-          className="w-2 cursor-col-resize flex-shrink-0 z-10 hover:bg-primary/20 transition-colors"
-          onMouseDown={() => setIsResizing(true)}
-        />
-
-        {/* 右侧：请求详情 */}
-        <Card className="min-w-0 flex flex-col flex-1 overflow-hidden">
-          <NetworkRequestDetail
-            request={selectedRequest}
-            searchQuery={searchQuery}
-            searchMatches={searchMatches}
-            isRegexMode={isRegexMode}
+          {/* 拖动区域 - 空白区域，鼠标悬停时变化 */}
+          <div
+            className="w-2 cursor-col-resize flex-shrink-0 z-10 hover:bg-primary/20 transition-colors"
+            onMouseDown={() => setIsResizing(true)}
           />
-        </Card>
-      </div>
+
+          {/* 右侧：请求详情 */}
+          <Card className="min-w-0 flex flex-col flex-1 overflow-hidden">
+            <NetworkRequestDetail
+              request={selectedRequest}
+              searchQuery={searchQuery}
+              searchMatches={searchMatches}
+              isRegexMode={isRegexMode}
+            />
+          </Card>
+        </div>
+      )}
 
       {/* 底部状态栏 - 一行显示 */}
       <div className="mt-4 flex-shrink-0 flex items-center gap-4 text-xs text-muted-foreground">

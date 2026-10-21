@@ -1,9 +1,10 @@
 import React, { useState } from 'react'
-import { FileText, HelpCircle, Circle } from 'lucide-react'
+import { FileText, HelpCircle, Circle, Moon, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { HelpDialog } from '@/components/dialogs/HelpDialog'
 import { useDeviceStore } from '@/store/deviceStore'
+import { useThemeStore } from '@/store/themeStore'
 
 /**
  * 底部状态栏组件
@@ -11,7 +12,9 @@ import { useDeviceStore } from '@/store/deviceStore'
  */
 export function Footer(): React.JSX.Element {
   const [helpOpen, setHelpOpen] = useState(false)
-  const { selectedDevice, devices, hdcVersion, adbVersion } = useDeviceStore()
+  const { selectedDevice, devices } = useDeviceStore()
+  const theme = useThemeStore((s) => s.theme)
+  const toggleTheme = useThemeStore((s) => s.toggleTheme)
 
   // 计算连接状态
   const connectedCount = devices.filter((d) => d.status === 'Connected').length
@@ -59,6 +62,17 @@ export function Footer(): React.JSX.Element {
 
         {/* 右侧操作按钮 */}
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs gap-1"
+            onClick={toggleTheme}
+            title={theme === 'dark' ? '切换到亮色' : '切换到暗黑'}
+            aria-label={theme === 'dark' ? '切换到亮色' : '切换到暗黑'}
+          >
+            {theme === 'dark' ? <Sun className="h-3 w-3" /> : <Moon className="h-3 w-3" />}
+            <span>{theme === 'dark' ? '亮色' : '暗黑'}</span>
+          </Button>
           <Button
             variant="ghost"
             size="sm"

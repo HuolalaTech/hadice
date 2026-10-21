@@ -12,6 +12,7 @@ import { PageProvider } from '@/contexts/PageContext'
 import { usePanelStore } from '@/store/panelStore'
 import { useDeviceStore } from '@/store/deviceStore'
 import { captureEvent } from '@/lib/posthog'
+import { useThemeStore } from '@/store/themeStore'
 import {
   DeviceOverviewPage,
   SystemInfoPage,
@@ -135,6 +136,7 @@ function App(): React.JSX.Element {
   const { page, standalone } = useUrlParams()
   const { panelOpenMap, getFirstVisibleMenuId } = usePanelStore()
   const initializeDevices = useDeviceStore((s) => s.initialize)
+  const theme = useThemeStore((s) => s.theme)
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false)
   const [updateInfo, setUpdateInfo] = useState<{
     currentVersion: string
@@ -245,10 +247,12 @@ function App(): React.JSX.Element {
   if (standalone) {
     return (
       <div className="h-screen flex flex-col bg-background text-foreground">
-        <main className="flex-1 overflow-auto bg-background">
+        <main className="flex-1 overflow-auto bg-background min-h-0">
           {renderPage(page, true)}
         </main>
-        <Toaster position="top-center" theme="dark" />
+        {/* 独立窗口也挂状态栏：主题切换 / 日志 / 帮助，并与主窗 localStorage 同步 */}
+        <Footer />
+        <Toaster position="top-center" theme={theme} />
       </div>
     )
   }
@@ -274,7 +278,7 @@ function App(): React.JSX.Element {
       <Footer />
       
       {/* Toast通知 */}
-      <Toaster position="top-center" theme="dark" />
+      <Toaster position="top-center" theme={theme} />
 
       {/* 更新提示对话框 */}
       {updateInfo && (

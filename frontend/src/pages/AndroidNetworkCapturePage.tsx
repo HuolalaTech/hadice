@@ -711,6 +711,15 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
     toast.success('已清空请求列表')
   }, [deviceId, storeClearRequests, storeSetSelectedRequest])
 
+  // 表头一键清屏：清空当前设备抓包面板全部数据
+  const handleClearAllRequests = useCallback((): void => {
+    if (!deviceId) return
+    captureEvent('android capture cleared all')
+    storeClearRequests(deviceId)
+    storeSetSelectedRequest(deviceId, null)
+    setSelectedIds(new Set())
+  }, [deviceId, storeClearRequests, storeSetSelectedRequest])
+
   // 未选择设备或非安卓设备时的提示
   if (!selectedDevice || selectedDevice.platform !== 'android') {
     return (
@@ -850,6 +859,7 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
             isRegexMode={isRegexMode}
             autoScrollEnabled={autoScrollEnabled}
             setAutoScrollEnabled={setAutoScrollEnabled}
+            onClearAll={handleClearAllRequests}
             showExportCheckboxes
             selectedIds={selectedIds}
             onToggleSelect={handleToggleSelect}

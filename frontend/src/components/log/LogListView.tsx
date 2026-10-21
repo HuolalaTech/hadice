@@ -31,8 +31,8 @@ const LEVEL_COLORS: Record<string, string> = {
   E: 'text-red-400',
   W: 'text-yellow-400',
   I: 'text-blue-400',
-  D: 'text-gray-400',
-  V: 'text-gray-500',
+  D: 'text-muted-foreground',
+  V: 'text-muted-foreground/80',
 };
 
 const SORT_ICONS: Record<string, { asc: string; desc: string }> = {
@@ -248,12 +248,12 @@ export const LogListView: React.FC<LogListViewProps> = React.memo(
     // ── Render ─────────────────────────────────────────────────────────────
 
     return (
-      <div className="flex flex-col h-full bg-gray-950 text-gray-200 select-none">
+      <div className="flex flex-col h-full bg-background text-foreground select-none">
         {/* ── Header Row ────────────────────────────────────────────────── */}
-        <div className="flex items-center border-b border-gray-800 px-2 py-1 text-xs font-medium text-gray-500 bg-gray-900 shrink-0">
+        <div className="flex items-center border-b border-border px-2 py-1 text-xs font-medium text-muted-foreground bg-card shrink-0">
           {/* Time header */}
           <div
-            className="w-[120px] cursor-pointer hover:text-gray-200 shrink-0 select-none"
+            className="w-[120px] cursor-pointer hover:text-foreground shrink-0 select-none"
             onClick={() => handleSort('time')}
           >
             Time{' '}
@@ -264,7 +264,7 @@ export const LogListView: React.FC<LogListViewProps> = React.memo(
 
           {/* Level header */}
           <div
-            className="w-[50px] cursor-pointer hover:text-gray-200 shrink-0 select-none"
+            className="w-[50px] cursor-pointer hover:text-foreground shrink-0 select-none"
             onClick={() => handleSort('level')}
           >
             Lvl{' '}
@@ -276,7 +276,7 @@ export const LogListView: React.FC<LogListViewProps> = React.memo(
           {/* PID header (conditional) */}
           {showPid && (
             <div
-              className="w-[70px] cursor-pointer hover:text-gray-200 shrink-0 select-none"
+              className="w-[70px] cursor-pointer hover:text-foreground shrink-0 select-none"
               onClick={() => handleSort('pid')}
             >
               PID{' '}
@@ -288,7 +288,7 @@ export const LogListView: React.FC<LogListViewProps> = React.memo(
 
           {/* Tag header */}
           <div
-            className="w-[150px] cursor-pointer hover:text-gray-200 shrink-0 select-none"
+            className="w-[150px] cursor-pointer hover:text-foreground shrink-0 select-none"
             onClick={() => handleSort('tag')}
           >
             Tag{' '}
@@ -299,7 +299,7 @@ export const LogListView: React.FC<LogListViewProps> = React.memo(
 
           {/* Message header */}
           <div
-            className="flex-1 cursor-pointer hover:text-gray-200 min-w-0 select-none"
+            className="flex-1 cursor-pointer hover:text-foreground min-w-0 select-none"
             onClick={() => handleSort('message')}
           >
             Message{' '}
@@ -318,7 +318,7 @@ export const LogListView: React.FC<LogListViewProps> = React.memo(
             />
             <label
               htmlFor="log-list-show-pid"
-              className="cursor-pointer text-gray-500 hover:text-gray-300 text-xs select-none"
+              className="cursor-pointer text-muted-foreground hover:text-foreground text-xs select-none"
             >
               PID
             </label>
@@ -328,7 +328,7 @@ export const LogListView: React.FC<LogListViewProps> = React.memo(
         {/* ── Virtual Scroll Body ────────────────────────────────────────── */}
         <div ref={scrollRef} className="flex-1 overflow-auto">
           {sortedEntries.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-gray-600 text-sm">
+            <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
               No log entries
             </div>
           ) : (
@@ -359,10 +359,10 @@ export const LogListView: React.FC<LogListViewProps> = React.memo(
                       transform: `translateY(${virtualItem.start}px)`,
                     }}
                     className={[
-                      'flex items-center px-2 text-xs border-b border-gray-800/50 cursor-pointer',
+                      'flex items-center px-2 text-xs border-b border-border/50 cursor-pointer',
                       isSelected
-                        ? 'bg-blue-900/30'
-                        : 'hover:bg-gray-800/30',
+                        ? 'bg-primary/15'
+                        : 'hover:bg-muted/60',
                     ].join(' ')}
                     onClick={(e) => handleRowClick(virtualItem.index, e)}
                     onContextMenu={(e) =>
@@ -370,7 +370,7 @@ export const LogListView: React.FC<LogListViewProps> = React.memo(
                     }
                   >
                     {/* Time cell */}
-                    <div className="w-[120px] shrink-0 text-gray-400 font-mono truncate pr-1">
+                    <div className="w-[120px] shrink-0 text-muted-foreground font-mono truncate pr-1">
                       {entry.time}
                     </div>
 
@@ -378,7 +378,7 @@ export const LogListView: React.FC<LogListViewProps> = React.memo(
                     <div
                       className={[
                         'w-[50px] shrink-0 font-mono font-bold',
-                        LEVEL_COLORS[entry.level] || 'text-gray-400',
+                        LEVEL_COLORS[entry.level] || 'text-muted-foreground',
                       ].join(' ')}
                     >
                       {entry.level}
@@ -386,7 +386,7 @@ export const LogListView: React.FC<LogListViewProps> = React.memo(
 
                     {/* PID cell (conditional) */}
                     {showPid && (
-                      <div className="w-[70px] shrink-0 text-gray-500 font-mono truncate pr-1">
+                      <div className="w-[70px] shrink-0 text-muted-foreground font-mono truncate pr-1">
                         {entry.pid}
                       </div>
                     )}
@@ -400,7 +400,7 @@ export const LogListView: React.FC<LogListViewProps> = React.memo(
                     <div
                       className={[
                         'flex-1 min-w-0 truncate font-mono',
-                        dupMerged ? 'text-orange-400' : 'text-gray-300',
+                        dupMerged ? 'text-orange-400' : 'text-foreground/90',
                       ].join(' ')}
                     >
                       {entry.message}
@@ -413,7 +413,7 @@ export const LogListView: React.FC<LogListViewProps> = React.memo(
         </div>
 
         {/* ── Status Bar ─────────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between px-3 py-1 border-t border-gray-800 bg-gray-900 text-xs text-gray-500 shrink-0">
+        <div className="flex items-center justify-between px-3 py-1 border-t border-border bg-card text-xs text-muted-foreground shrink-0">
           <span>{sortedEntries.length.toLocaleString()} entries</span>
           <span className="flex items-center gap-3">
             {suppressedCount > 0 && (
@@ -434,43 +434,43 @@ export const LogListView: React.FC<LogListViewProps> = React.memo(
           const contextEntry = sortedEntries[contextMenu.index];
           return (
             <div
-              className="fixed z-50 bg-gray-800 border border-gray-700 rounded shadow-xl py-1 min-w-[170px] text-xs"
+              className="fixed z-50 bg-popover border border-border rounded shadow-xl py-1 min-w-[170px] text-xs"
               style={{ left: contextMenu.x, top: contextMenu.y }}
             >
               <div
-                className="px-3 py-1.5 hover:bg-gray-700 cursor-pointer text-gray-300"
+                className="px-3 py-1.5 hover:bg-accent cursor-pointer text-popover-foreground"
                 onClick={handleCopyRow}
               >
                 Copy Row
               </div>
-              <div className="border-t border-gray-700 my-0.5" />
+              <div className="border-t border-border my-0.5" />
               <div
-                className="px-3 py-1.5 hover:bg-gray-700 cursor-pointer text-gray-300"
+                className="px-3 py-1.5 hover:bg-accent cursor-pointer text-popover-foreground"
                 onClick={() => handleCopyField('time')}
               >
                 Copy Time
               </div>
               <div
-                className="px-3 py-1.5 hover:bg-gray-700 cursor-pointer text-gray-300"
+                className="px-3 py-1.5 hover:bg-accent cursor-pointer text-popover-foreground"
                 onClick={() => handleCopyField('level')}
               >
                 Copy Level
               </div>
               <div
-                className="px-3 py-1.5 hover:bg-gray-700 cursor-pointer text-gray-300"
+                className="px-3 py-1.5 hover:bg-accent cursor-pointer text-popover-foreground"
                 onClick={() => handleCopyField('tag')}
               >
                 Copy Tag
               </div>
               <div
-                className="px-3 py-1.5 hover:bg-gray-700 cursor-pointer text-gray-300"
+                className="px-3 py-1.5 hover:bg-accent cursor-pointer text-popover-foreground"
                 onClick={() => handleCopyField('message')}
               >
                 Copy Message
               </div>
               {showPid && (
                 <div
-                  className="px-3 py-1.5 hover:bg-gray-700 cursor-pointer text-gray-300"
+                  className="px-3 py-1.5 hover:bg-accent cursor-pointer text-popover-foreground"
                   onClick={() => handleCopyField('pid')}
                 >
                   Copy PID
@@ -478,9 +478,9 @@ export const LogListView: React.FC<LogListViewProps> = React.memo(
               )}
               {contextEntry && (
                 <>
-                  <div className="border-t border-gray-700 my-0.5" />
+                  <div className="border-t border-border my-0.5" />
                   <div
-                    className="px-3 py-1.5 hover:bg-gray-700 cursor-pointer text-yellow-400"
+                    className="px-3 py-1.5 hover:bg-accent cursor-pointer text-yellow-500"
                     onClick={handleSuppressTag}
                   >
                     Suppress Tag: {contextEntry.tag}
