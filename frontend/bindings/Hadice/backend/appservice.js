@@ -1359,6 +1359,19 @@ export function ListAllDevices(verbose) {
 }
 
 /**
+ * ListAndroidWebViews 列出安卓应用当前可调试的 WebView 页面。
+ * @param {string} deviceId
+ * @param {number} pid
+ * @param {string} packageName
+ * @returns {$CancellablePromise<adb$0.WebViewPage[]>}
+ */
+export function ListAndroidWebViews(deviceId, pid, packageName) {
+    return $Call.ByID(1958675795, deviceId, pid, packageName).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType82($result);
+    }));
+}
+
+/**
  * ListDeviceDirectory 列出设备目录内容
  * platform: "harmonyos" 或 "android"
  * @param {string} connectKey
@@ -1379,7 +1392,7 @@ export function ListDeviceDirectory(connectKey, path, platform) {
  */
 export function ListDevices(verbose) {
     return $Call.ByID(700490603, verbose).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType82($result);
+        return $$createType84($result);
     }));
 }
 
@@ -1389,7 +1402,7 @@ export function ListDevices(verbose) {
  */
 export function ListDevicesWithInfo() {
     return $Call.ByID(1754884039).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType82($result);
+        return $$createType84($result);
     }));
 }
 
@@ -1402,7 +1415,7 @@ export function ListDevicesWithInfo() {
  */
 export function ListHarmonyWebViews(deviceId, pid, bundleName) {
     return $Call.ByID(1606387382, deviceId, pid, bundleName).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType84($result);
+        return $$createType86($result);
     }));
 }
 
@@ -1423,7 +1436,7 @@ export function ListLocalDirectory(path) {
  */
 export function ListPortForwards() {
     return $Call.ByID(2913808025).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType86($result);
+        return $$createType88($result);
     }));
 }
 
@@ -1511,7 +1524,7 @@ export function OpenScreenshotFolder(savePath) {
  */
 export function ParseAppPackageInfo(filePath) {
     return $Call.ByID(389740578, filePath).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType88($result);
+        return $$createType90($result);
     }));
 }
 
@@ -1523,7 +1536,7 @@ export function ParseAppPackageInfo(filePath) {
  */
 export function ParseHapAppInfo(filePath) {
     return $Call.ByID(2383677915, filePath).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType88($result);
+        return $$createType90($result);
     }));
 }
 
@@ -2335,11 +2348,13 @@ const $$createType77 = device$0.SystemRuntime.createFrom;
 const $$createType78 = $Create.Nullable($$createType77);
 const $$createType79 = device$0.Device.createFrom;
 const $$createType80 = $Create.Array($$createType79);
-const $$createType81 = hdc$0.HdcDevice.createFrom;
+const $$createType81 = adb$0.WebViewPage.createFrom;
 const $$createType82 = $Create.Array($$createType81);
-const $$createType83 = hdc$0.WebViewPage.createFrom;
+const $$createType83 = hdc$0.HdcDevice.createFrom;
 const $$createType84 = $Create.Array($$createType83);
-const $$createType85 = $models.PortForwardItem.createFrom;
+const $$createType85 = hdc$0.WebViewPage.createFrom;
 const $$createType86 = $Create.Array($$createType85);
-const $$createType87 = hdc$0.InstallPackageInfo.createFrom;
-const $$createType88 = $Create.Nullable($$createType87);
+const $$createType87 = $models.PortForwardItem.createFrom;
+const $$createType88 = $Create.Array($$createType87);
+const $$createType89 = hdc$0.InstallPackageInfo.createFrom;
+const $$createType90 = $Create.Nullable($$createType89);

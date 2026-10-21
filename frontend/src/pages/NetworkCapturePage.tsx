@@ -1135,6 +1135,12 @@ export function NetworkCapturePage(): React.JSX.Element {
         <Card className="flex-1 min-h-0 overflow-hidden">
           <HarmonyWebViewPanel
             deviceId={selectedDevice.connectKey}
+            deviceLabel={
+              selectedDevice.displayName ||
+              selectedDevice.deviceName ||
+              selectedDevice.model ||
+              selectedDevice.connectKey
+            }
             app={selectedHiProfilerApp}
           />
         </Card>

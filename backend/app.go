@@ -1912,6 +1912,11 @@ func (a *App) ListHarmonyWebViews(deviceId string, pid int, bundleName string) (
 	return hdc.ListWebViews(deviceId, pid, bundleName)
 }
 
+// ListAndroidWebViews 列出安卓应用当前可调试的 WebView 页面。
+func (a *App) ListAndroidWebViews(deviceId string, pid int, packageName string) ([]adb.WebViewPage, error) {
+	return adb.ListWebViews(deviceId, pid, packageName)
+}
+
 // GetHadiceOutputDirectory 获取并创建 ~/Documents/Hadice 下的输出目录。
 func (a *App) GetHadiceOutputDirectory(subdir string) (string, error) {
 	if strings.TrimSpace(subdir) == "" {
