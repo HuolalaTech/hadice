@@ -41,7 +41,7 @@
     "recharts": "3.5.1",
     "sonner": "2.0.7",
     "tailwind-merge": "3.4.0",
-    "zustand": "5.0.8"
+    "zustand": "5.0.15"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.1.17",
