@@ -187,10 +187,10 @@ sudo xattr -dr com.apple.quarantine /Applications/Hadice.app
 
 | 依赖                                | 说明                                                          |
 |-----------------------------------|-------------------------------------------------------------|
-| Go                                | 1.24+                                                       |
+| Go                                | 1.25+                                                       |
 | Node.js                           | 建议 20+（含 npm）                                               |
 | [Task](https://taskfile.dev/)     | 构建任务入口                                                      |
-| [Wails v3 CLI](https://wails.io/) | `go install github.com/wailsapp/wails/v3/cmd/wails3@latest` |
+| [Wails v3 CLI](https://wails.io/) | `go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.30` |
 | Android NDK  + JDK                | 编译安卓抓包 Agent 时需要（`task build` / `task dev` 会调用）, NDK 25.2.9519653       |
 
 ### 克隆与安装

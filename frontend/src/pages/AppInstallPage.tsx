@@ -646,7 +646,7 @@ export function AppInstallPage(): React.JSX.Element {
           className={`flex-1 flex items-center justify-center bg-black transition-all duration-200 ${
             isDragging ? 'ring-2 ring-primary bg-primary/10' : ''
           }`}
-          // data-file-drop-target 是 @wailsio/runtime alpha.79 识别文件拖放区域的必需属性
+          // data-file-drop-target 是 Wails 识别文件拖放区域的必需属性
           data-file-drop-target
         >
           <div className="text-center text-muted-foreground p-8">

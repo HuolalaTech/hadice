@@ -74,7 +74,7 @@ func Run(assets embed.FS) error {
 		Height:           windowHeight,
 		BackgroundColour: application.NewRGBA(27, 38, 54, 255),
 		// 启用文件拖放功能，允许从操作系统拖拽文件到窗口
-		EnableDragAndDrop: true,
+		EnableFileDrop: true,
 	})
 
 	if mainWindow == nil {
@@ -99,8 +99,8 @@ func Run(assets embed.FS) error {
 	})
 
 	// 监听文件拖放事件，将拖放的文件路径转发给前端
-	// 使用 data-wails-dropzone 时触发的是 WindowDropZoneFilesDropped（非 WindowFilesDropped）
-	mainWindow.OnWindowEvent(events.Common.WindowDropZoneFilesDropped, func(event *application.WindowEvent) {
+	// data-file-drop-target 标记前端可接收文件的区域。
+	mainWindow.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
 		files := event.Context().DroppedFiles()
 		if len(files) > 0 {
 			log.Printf("[Main] Files dropped on zone: %v", files)

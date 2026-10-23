@@ -196,10 +196,10 @@ sudo xattr -dr com.apple.quarantine /Applications/Hadice.app
 
 | Dependency | Notes |
 |------------|--------|
-| Go | 1.24+ |
+| Go | 1.25+ |
 | Node.js | 20+ recommended (with npm) |
 | [Task](https://taskfile.dev/) | Build task runner |
-| [Wails v3 CLI](https://wails.io/) | `go install github.com/wailsapp/wails/v3/cmd/wails3@latest` |
+| [Wails v3 CLI](https://wails.io/) | `go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.30` |
 | Android NDK + JDK | Required to build the Android capture agent (`task build` / `task dev`). NDK 25.2.9519653 |
 
 ### Clone & setup
