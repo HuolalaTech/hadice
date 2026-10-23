@@ -5,5 +5,6 @@
 export {
     AdbResult,
     AndroidAppInfo,
-    AndroidAppListResult
+    AndroidAppListResult,
+    WebViewPage
 } from "./models.js";

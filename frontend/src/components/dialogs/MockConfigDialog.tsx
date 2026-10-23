@@ -32,6 +32,7 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import type { MockConfig, MockRule, MockResponseMode, MockReplaceRule } from '@/types/hdc'
+import { useThemeStore } from '@/store/themeStore'
 
 interface MockConfigDialogProps {
   open: boolean
@@ -677,6 +678,7 @@ interface JsonBodyEditorProps {
 }
 
 function JsonBodyEditor({ value, onChange, className }: JsonBodyEditorProps): React.JSX.Element {
+  const theme = useThemeStore((s) => s.theme)
   const extensions = React.useMemo(() => [
     json(),
     linter(preciseJsonLinter()),
@@ -685,7 +687,7 @@ function JsonBodyEditor({ value, onChange, className }: JsonBodyEditorProps): Re
 
   return (
     <div
-      className={`min-w-0 overflow-hidden rounded-md border bg-[#1e1e1e] ${className || ''}`}
+      className={`min-w-0 overflow-hidden rounded-md border bg-muted ${className || ''}`}
       style={{ width: '98%', maxWidth: '98%' }}
     >
       <CodeMirror
@@ -693,7 +695,7 @@ function JsonBodyEditor({ value, onChange, className }: JsonBodyEditorProps): Re
         height="100%"
         width="100%"
         maxWidth="100%"
-        theme="dark"
+        theme={theme}
         basicSetup={{
           lineNumbers: true,
           foldGutter: true,

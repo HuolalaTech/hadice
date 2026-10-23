@@ -31,6 +31,8 @@ import type { LogcatLogLevel } from '@/lib/hdc-api/hilog'
 import { deviceAPI } from '@/lib/hdc-api/device'
 import { captureEvent } from '@/lib/posthog'
 import { useLogStream } from '@/hooks/useLogStream'
+import { getTerminalTheme } from '@/lib/theme'
+import { useThemeStore } from '@/store/themeStore'
 
 type HarmonyLogLevel = 'D' | 'I' | 'W' | 'E' | 'F'
 
@@ -158,6 +160,8 @@ export function SystemLogsPage(): React.JSX.Element {
 
   // ── Terminal refs ──────────────────────────────────────────────────────────
   const terminalRef = useRef<HTMLDivElement>(null)
+  const terminalInstanceRef = useRef<Terminal | null>(null)
+  const theme = useThemeStore((s) => s.theme)
 
   // ── Derive backend / client filters ────────────────────────────────────────
   const backendFilters = useMemo(() => {
@@ -200,27 +204,7 @@ export function SystemLogsPage(): React.JSX.Element {
     if (!terminalRef.current || viewMode !== 'terminal') return
 
     const terminal = new Terminal({
-      theme: {
-        background: '#0a0a0b',
-        foreground: '#fafafa',
-        cursor: '#fafafa',
-        black: '#000000',
-        red: '#ef4444',
-        green: '#22c55e',
-        yellow: '#eab308',
-        blue: '#3b82f6',
-        magenta: '#a855f7',
-        cyan: '#06b6d4',
-        white: '#fafafa',
-        brightBlack: '#525252',
-        brightRed: '#ef4444',
-        brightGreen: '#22c55e',
-        brightYellow: '#eab308',
-        brightBlue: '#3b82f6',
-        brightMagenta: '#a855f7',
-        brightCyan: '#06b6d4',
-        brightWhite: '#ffffff'
-      },
+      theme: getTerminalTheme(useThemeStore.getState().theme),
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
       fontSize: 11,
       cursorBlink: false,
@@ -232,6 +216,7 @@ export function SystemLogsPage(): React.JSX.Element {
     terminal.loadAddon(fitAddon)
 
     terminal.open(terminalRef.current)
+    terminalInstanceRef.current = terminal
 
     // Register terminal with the log stream hook
     setTerminal(terminal)
@@ -262,9 +247,16 @@ export function SystemLogsPage(): React.JSX.Element {
       window.removeEventListener('resize', handleResize)
       resizeObserver.disconnect()
       setTerminal(null)
+      terminalInstanceRef.current = null
       terminal.dispose()
     }
   }, [setTerminal, viewMode])
+
+  useEffect(() => {
+    if (terminalInstanceRef.current) {
+      terminalInstanceRef.current.options.theme = getTerminalTheme(theme)
+    }
+  }, [theme])
 
   // ── Auto-start stream when device is connected ──────────────────────────────
   const isMountedRef = useRef(true)

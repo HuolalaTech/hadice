@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
@@ -19,8 +19,6 @@ import {
 import { Cpu, MemoryStick, Wifi, Monitor, Battery, HardDrive, Zap, Activity, AlertTriangle, HardDriveDownload, Loader2 } from 'lucide-react'
 import { formatBytes } from '@/lib/format'
 import { copyTextToClipboard } from '@/lib/clipboard'
-
-const TOOLTIP_STYLE = { backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '6px', fontSize: '10px', lineHeight: '14px', padding: '4px 6px' }
 import { ANIMATION_CONFIG } from '@/hooks/useChartAnimation'
 import { useDeviceStore } from '@/store/deviceStore'
 import type { PerformanceHistory, ProcessPerformanceEntry, CpuFreqHistory, ProcessMemoryHistory, ProcessIOHistory, IpcHistory } from '@/hooks/usePerformanceData'
@@ -37,6 +35,13 @@ import type {
   ProcessIOInfo,
   IpcStatInfo
 } from '@/types/hdc'
+import { getChartChrome } from '@/lib/theme'
+import { useThemeStore } from '@/store/themeStore'
+
+function useChartChrome() {
+  const theme = useThemeStore((s) => s.theme)
+  return useMemo(() => getChartChrome(theme), [theme])
+}
 
 /**
  * 从进程历史中提取进程名映射
@@ -93,6 +98,7 @@ export function CpuChart({
   processData?: ProcessPerformanceEntry[]
   selectedPids?: number[]
 }): React.JSX.Element {
+  const chrome = useChartChrome()
   const hasProcessData = processData && selectedPids && selectedPids.length > 0 && processData.length > 0
 
   // 进程模式：汇总选中进程的 Total/User/Kernel
@@ -126,10 +132,10 @@ export function CpuChart({
           <div className="h-52">
             <ResponsiveContainer width="100%" height="100%" key="cpu-process-chart">
               <LineChart data={chartData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }} syncId="performance-charts">
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="time" stroke="#666" fontSize={10} interval="preserveStartEnd" />
-                <YAxis stroke="#666" fontSize={10} domain={[0, 'auto']} tickFormatter={(v: number) => `${Math.round(v)}%`} />
-                <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={{ color: '#888', fontSize: '10px' }} formatter={(value: number) => `${Math.round(value * 10) / 10}%`} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chrome.grid} />
+                <XAxis dataKey="time" stroke={chrome.axis} fontSize={10} interval="preserveStartEnd" />
+                <YAxis stroke={chrome.axis} fontSize={10} domain={[0, 'auto']} tickFormatter={(v: number) => `${Math.round(v)}%`} />
+                <Tooltip contentStyle={chrome.tooltipStyle} labelStyle={{ color: chrome.label, fontSize: '10px' }} formatter={(value: number) => `${Math.round(value * 10) / 10}%`} />
 
                 <Line type="monotone" dataKey="cpuTotal" name="总计" stroke="#f97316" strokeWidth={2} dot={false} isAnimationActive={isAnimationActive} animationDuration={ANIMATION_CONFIG.duration} animationEasing={ANIMATION_CONFIG.easing} />
                 <Line type="monotone" dataKey="cpuUser" name="用户" stroke="#22c55e" strokeWidth={1.5} dot={false} isAnimationActive={isAnimationActive} animationDuration={ANIMATION_CONFIG.duration} animationEasing={ANIMATION_CONFIG.easing} />
@@ -165,12 +171,12 @@ export function CpuChart({
               margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
               syncId="performance-charts"
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-              <XAxis dataKey="time" stroke="#666" fontSize={10} interval="preserveStartEnd" />
-              <YAxis stroke="#666" fontSize={10} domain={[0, 100]} tickFormatter={(v: number) => `${Math.round(v)}%`} />
+              <CartesianGrid strokeDasharray="3 3" stroke={chrome.grid} />
+              <XAxis dataKey="time" stroke={chrome.axis} fontSize={10} interval="preserveStartEnd" />
+              <YAxis stroke={chrome.axis} fontSize={10} domain={[0, 100]} tickFormatter={(v: number) => `${Math.round(v)}%`} />
               <Tooltip
-                contentStyle={TOOLTIP_STYLE}
-                labelStyle={{ color: '#888' }}
+                contentStyle={chrome.tooltipStyle}
+                labelStyle={{ color: chrome.label, fontSize: '10px' }}
                 formatter={(value: number) => `${Math.round(value)}%`}
               />
               <Line type="monotone" dataKey="cpuTotal" name="总计" stroke="#f97316" strokeWidth={2} dot={false} isAnimationActive={isAnimationActive} animationDuration={ANIMATION_CONFIG.duration} animationEasing={ANIMATION_CONFIG.easing} />
@@ -202,6 +208,7 @@ export function MemoryChart({
   processMemoryDetail?: ProcessMemoryDetail | null
   selectedPids?: number[]
 }): React.JSX.Element {
+  const chrome = useChartChrome()
   const hasProcessData = processMemoryHistory && selectedPids && selectedPids.length > 0 && processMemoryHistory.length > 0
 
   // 进程模式：按内存分类堆叠面积图
@@ -233,12 +240,12 @@ export function MemoryChart({
                 margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
                 syncId="performance-charts"
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                <XAxis dataKey="time" stroke="#666" fontSize={10} interval="preserveStartEnd" />
-                <YAxis stroke="#666" fontSize={10} domain={[0, 'auto']} tickFormatter={(v: number) => `${Math.round(v)}MB`} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chrome.grid} />
+                <XAxis dataKey="time" stroke={chrome.axis} fontSize={10} interval="preserveStartEnd" />
+                <YAxis stroke={chrome.axis} fontSize={10} domain={[0, 'auto']} tickFormatter={(v: number) => `${Math.round(v)}MB`} />
                 <Tooltip
-                  contentStyle={TOOLTIP_STYLE}
-                  labelStyle={{ color: '#888', fontSize: '10px' }}
+                  contentStyle={chrome.tooltipStyle}
+                  labelStyle={{ color: chrome.label, fontSize: '10px' }}
                   formatter={(value: number) => `${Math.round(value * 10) / 10}MB`}
                 />
 
@@ -261,7 +268,7 @@ export function MemoryChart({
                   type="monotone"
                   dataKey="totalPss"
                   name="总 PSS"
-                  stroke="#ffffff"
+                  stroke={chrome.memoryStroke}
                   strokeWidth={2}
                   dot={false}
                   strokeDasharray="5 3"
@@ -314,11 +321,11 @@ export function MemoryChart({
               margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
               syncId="performance-charts"
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-              <XAxis dataKey="time" stroke="#666" fontSize={10} interval="preserveStartEnd" />
-              <YAxis stroke="#666" fontSize={10} domain={[0, 'auto']} tickFormatter={(v: number) => `${Math.round(v)}MB`} />
+              <CartesianGrid strokeDasharray="3 3" stroke={chrome.grid} />
+              <XAxis dataKey="time" stroke={chrome.axis} fontSize={10} interval="preserveStartEnd" />
+              <YAxis stroke={chrome.axis} fontSize={10} domain={[0, 'auto']} tickFormatter={(v: number) => `${Math.round(v)}MB`} />
               <Tooltip
-                contentStyle={TOOLTIP_STYLE}
+                contentStyle={chrome.tooltipStyle}
                 formatter={(value: number) => `${Math.round(value)}MB`}
               />
               <Area
@@ -352,6 +359,7 @@ export function NetworkChart({
   totalNetworkTraffic: { rx: number; tx: number }
   isAnimationActive: boolean
 }): React.JSX.Element {
+  const chrome = useChartChrome()
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -373,11 +381,11 @@ export function NetworkChart({
               margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
               syncId="performance-charts"
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-              <XAxis dataKey="time" stroke="#666" fontSize={10} interval="preserveStartEnd" />
-              <YAxis stroke="#666" fontSize={10} tickFormatter={(v) => formatBytes(v)} />
+              <CartesianGrid strokeDasharray="3 3" stroke={chrome.grid} />
+              <XAxis dataKey="time" stroke={chrome.axis} fontSize={10} interval="preserveStartEnd" />
+              <YAxis stroke={chrome.axis} fontSize={10} tickFormatter={(v) => formatBytes(v)} />
               <Tooltip
-                contentStyle={TOOLTIP_STYLE}
+                contentStyle={chrome.tooltipStyle}
                 formatter={(value: number) => formatBytes(value) + '/s'}
               />
               <Area
@@ -424,6 +432,7 @@ export function FpsChart({
   currentFps: number
   isAnimationActive: boolean
 }): React.JSX.Element {
+  const chrome = useChartChrome()
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -445,11 +454,11 @@ export function FpsChart({
               margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
               syncId="performance-charts"
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-              <XAxis dataKey="time" stroke="#666" fontSize={10} interval="preserveStartEnd" />
-              <YAxis stroke="#666" fontSize={10} domain={[0, 'auto']} />
+              <CartesianGrid strokeDasharray="3 3" stroke={chrome.grid} />
+              <XAxis dataKey="time" stroke={chrome.axis} fontSize={10} interval="preserveStartEnd" />
+              <YAxis stroke={chrome.axis} fontSize={10} domain={[0, 'auto']} />
               <Tooltip
-                contentStyle={TOOLTIP_STYLE}
+                contentStyle={chrome.tooltipStyle}
                 formatter={(value: number) => `${value} FPS`}
               />
               <Bar
@@ -570,6 +579,7 @@ export function BatteryChart({
   batteryInfo: BatteryInfo | null
   isAnimationActive: boolean
 }): React.JSX.Element {
+  const chrome = useChartChrome()
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -606,8 +616,8 @@ export function BatteryChart({
               margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
               syncId="performance-charts"
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-              <XAxis dataKey="time" stroke="#666" fontSize={10} interval="preserveStartEnd" />
+              <CartesianGrid strokeDasharray="3 3" stroke={chrome.grid} />
+              <XAxis dataKey="time" stroke={chrome.axis} fontSize={10} interval="preserveStartEnd" />
               <YAxis yAxisId="left" stroke="#22c55e" fontSize={10} domain={[0, 100]} />
               <YAxis
                 yAxisId="right"
@@ -617,7 +627,7 @@ export function BatteryChart({
                 domain={[0, 50]}
               />
               <Tooltip
-                contentStyle={TOOLTIP_STYLE}
+                contentStyle={chrome.tooltipStyle}
               />
               <Line
                 yAxisId="left"
@@ -663,6 +673,7 @@ export function CpuFreqChart({
   cpuFreqInfo: CpuFreqInfo | null
   isAnimationActive: boolean
 }): React.JSX.Element {
+  const chrome = useChartChrome()
   let bigCur = 0, bigMax = 0, midCur = 0, midMax = 0, littleCur = 0, littleMax = 0
   if (cpuFreqInfo?.cores) {
     for (const c of cpuFreqInfo.cores) {
@@ -684,10 +695,10 @@ export function CpuFreqChart({
         <div className="h-52">
           <ResponsiveContainer width="100%" height="100%" key="cpufreq-chart">
             <LineChart data={data} margin={{ top: 5, right: 5, left: 5, bottom: 5 }} syncId="performance-charts">
-              <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-              <XAxis dataKey="time" stroke="#666" fontSize={10} interval="preserveStartEnd" />
-              <YAxis stroke="#666" fontSize={10} />
-              <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={{ color: '#888', fontSize: '10px' }} formatter={(value: number) => `${value} MHz`} />
+              <CartesianGrid strokeDasharray="3 3" stroke={chrome.grid} />
+              <XAxis dataKey="time" stroke={chrome.axis} fontSize={10} interval="preserveStartEnd" />
+              <YAxis stroke={chrome.axis} fontSize={10} />
+              <Tooltip contentStyle={chrome.tooltipStyle} labelStyle={{ color: chrome.label, fontSize: '10px' }} formatter={(value: number) => `${value} MHz`} />
               <Line type="monotone" dataKey="bigCore" name="大核" stroke="#f97316" strokeWidth={1.5} dot={false} isAnimationActive={isAnimationActive} animationDuration={ANIMATION_CONFIG.duration} animationEasing={ANIMATION_CONFIG.easing} />
               <Line type="monotone" dataKey="midCore" name="中核" stroke="#06b6d4" strokeWidth={1.5} dot={false} isAnimationActive={isAnimationActive} animationDuration={ANIMATION_CONFIG.duration} animationEasing={ANIMATION_CONFIG.easing} />
               <Line type="monotone" dataKey="littleCore" name="小核" stroke="#3b82f6" strokeWidth={1.5} dot={false} isAnimationActive={isAnimationActive} animationDuration={ANIMATION_CONFIG.duration} animationEasing={ANIMATION_CONFIG.easing} />
@@ -839,6 +850,7 @@ export function ProcessIOChart({
   processIOInfo: ProcessIOInfo | null
   isAnimationActive: boolean
 }): React.JSX.Element {
+  const chrome = useChartChrome()
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -854,10 +866,10 @@ export function ProcessIOChart({
         <div className="h-52">
           <ResponsiveContainer width="100%" height="100%" key="process-io-chart">
             <AreaChart data={data} margin={{ top: 5, right: 5, left: 5, bottom: 5 }} syncId="performance-charts">
-              <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-              <XAxis dataKey="time" stroke="#666" fontSize={10} interval="preserveStartEnd" />
-              <YAxis stroke="#666" fontSize={10} tickFormatter={(v) => formatBytes(v) + '/s'} />
-              <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={{ color: '#888', fontSize: '10px' }} formatter={(value: number) => formatBytes(value) + '/s'} />
+              <CartesianGrid strokeDasharray="3 3" stroke={chrome.grid} />
+              <XAxis dataKey="time" stroke={chrome.axis} fontSize={10} interval="preserveStartEnd" />
+              <YAxis stroke={chrome.axis} fontSize={10} tickFormatter={(v) => formatBytes(v) + '/s'} />
+              <Tooltip contentStyle={chrome.tooltipStyle} labelStyle={{ color: chrome.label, fontSize: '10px' }} formatter={(value: number) => formatBytes(value) + '/s'} />
               <Area type="monotone" dataKey="readRate" name="读取" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.3} isAnimationActive={isAnimationActive} animationDuration={ANIMATION_CONFIG.duration} animationEasing={ANIMATION_CONFIG.easing} />
               <Area type="monotone" dataKey="writeRate" name="写入" stroke="#22c55e" fill="#22c55e" fillOpacity={0.3} isAnimationActive={isAnimationActive} animationDuration={ANIMATION_CONFIG.duration} animationEasing={ANIMATION_CONFIG.easing} />
             </AreaChart>
@@ -885,6 +897,7 @@ export function IpcChart({
   ipcStatInfo: IpcStatInfo | null
   isAnimationActive: boolean
 }): React.JSX.Element {
+  const chrome = useChartChrome()
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -900,11 +913,11 @@ export function IpcChart({
         <div className="h-52">
           <ResponsiveContainer width="100%" height="100%" key="ipc-chart">
             <LineChart data={data} margin={{ top: 5, right: 5, left: 5, bottom: 5 }} syncId="performance-charts">
-              <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-              <XAxis dataKey="time" stroke="#666" fontSize={10} interval="preserveStartEnd" />
+              <CartesianGrid strokeDasharray="3 3" stroke={chrome.grid} />
+              <XAxis dataKey="time" stroke={chrome.axis} fontSize={10} interval="preserveStartEnd" />
               <YAxis yAxisId="left" stroke="#3b82f6" fontSize={10} />
               <YAxis yAxisId="right" orientation="right" stroke="#f97316" fontSize={10} tickFormatter={(v: number) => `${v}μs`} />
-              <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={{ color: '#888', fontSize: '10px' }} />
+              <Tooltip contentStyle={chrome.tooltipStyle} labelStyle={{ color: chrome.label, fontSize: '10px' }} />
               <Line yAxisId="left" type="monotone" dataKey="callCount" name="调用次数" stroke="#3b82f6" strokeWidth={1.5} dot={false} isAnimationActive={isAnimationActive} animationDuration={ANIMATION_CONFIG.duration} animationEasing={ANIMATION_CONFIG.easing} />
               <Line yAxisId="right" type="monotone" dataKey="avgTimeCost" name="平均耗时(μs)" stroke="#f97316" strokeWidth={1.5} dot={false} isAnimationActive={isAnimationActive} animationDuration={ANIMATION_CONFIG.duration} animationEasing={ANIMATION_CONFIG.easing} />
             </LineChart>

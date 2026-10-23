@@ -10,7 +10,8 @@ import type {
   NetworkRequest,
   CaptureStatus,
   ConnectionTestResult,
-  HiProfilerCaptureStatus
+  HiProfilerCaptureStatus,
+  HarmonyWebViewPage
 } from '@/types/hdc'
 
 function getRuntimeErrorMessage(error: unknown): string {
@@ -533,6 +534,48 @@ export const networkCaptureAPI = {
     return {
       alive: status?.alive === true,
       pid: Number(status?.pid || 0)
+    }
+  },
+
+  ListHarmonyWebViews: async (
+    deviceId: string,
+    pid: number,
+    bundleName: string
+  ): Promise<HarmonyWebViewPage[]> => {
+    try {
+      const pages = await App.ListHarmonyWebViews(deviceId, pid, bundleName)
+      return (pages || []).map((page) => ({
+        id: page?.id || '',
+        type: page?.type || '',
+        url: page?.url || '',
+        title: page?.title || '',
+        faviconUrl: page?.faviconUrl || '',
+        webSocketDebuggerUrl: page?.webSocketDebuggerUrl || ''
+      }))
+    } catch (error) {
+      console.error('[HDC API] ListHarmonyWebViews failed:', error)
+      throw error
+    }
+  },
+
+  ListAndroidWebViews: async (
+    deviceId: string,
+    pid: number,
+    packageName: string
+  ): Promise<HarmonyWebViewPage[]> => {
+    try {
+      const pages = await App.ListAndroidWebViews(deviceId, pid, packageName)
+      return (pages || []).map((page) => ({
+        id: page?.id || '',
+        type: page?.type || '',
+        url: page?.url || '',
+        title: page?.title || '',
+        faviconUrl: page?.faviconUrl || '',
+        webSocketDebuggerUrl: page?.webSocketDebuggerUrl || ''
+      }))
+    } catch (error) {
+      console.error('[HDC API] ListAndroidWebViews failed:', error)
+      throw error
     }
   },
 
