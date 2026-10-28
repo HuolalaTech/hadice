@@ -5,6 +5,10 @@ import './index.css'
 import { hdcAPI } from './lib/hdc-api'
 import { initConsoleBridge } from './lib/console-bridge'
 import { initPostHog } from './lib/posthog'
+import { initTheme } from './lib/theme'
+
+// 首屏前应用主题，避免闪暗/闪亮
+initTheme()
 
 // 初始化 PostHog（未配置 VITE_POSTHOG_KEY 则跳过）
 initPostHog().catch(console.error)

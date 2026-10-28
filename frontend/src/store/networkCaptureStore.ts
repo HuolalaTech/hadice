@@ -402,13 +402,17 @@ export const useNetworkCaptureStore = create<NetworkCaptureState>((set, get) => 
       const existingKey = getNetworkRequestKey(existing)
 
       if (existingKey === key) {
-        // 找到匹配的请求，进行合并
+        // 找到匹配的请求，进行合并（extra 必须合并，否则 mocked 标记会丢）
+        const mergedExtra = (existing.extra || request.extra)
+          ? { ...(existing.extra || {}), ...(request.extra || {}) } as typeof request.extra
+          : undefined
         if (request.statusCode && !existing.statusCode) {
           // 当前请求有响应，替换
           existingRequests[i] = {
             ...request,
             requestHeaders: request.requestHeaders || existing.requestHeaders,
             requestBody: request.requestBody || existing.requestBody,
+            extra: mergedExtra || request.extra,
             timestamp: Math.min(request.timestamp, existing.timestamp)
           }
         } else if (!request.statusCode && existing.statusCode) {
@@ -417,6 +421,7 @@ export const useNetworkCaptureStore = create<NetworkCaptureState>((set, get) => 
             ...existing,
             requestHeaders: request.requestHeaders || existing.requestHeaders,
             requestBody: request.requestBody || existing.requestBody,
+            extra: mergedExtra || existing.extra,
             timestamp: Math.min(request.timestamp, existing.timestamp)
           }
         } else {
@@ -428,6 +433,7 @@ export const useNetworkCaptureStore = create<NetworkCaptureState>((set, get) => 
             responseHeaders: request.responseHeaders || existing.responseHeaders,
             responseBody: request.responseBody || existing.responseBody,
             statusCode: request.statusCode || existing.statusCode,
+            extra: mergedExtra || existing.extra,
             timestamp: Math.min(request.timestamp, existing.timestamp)
           }
         }

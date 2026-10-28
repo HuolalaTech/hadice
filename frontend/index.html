@@ -4,13 +4,32 @@
     <meta charset="UTF-8"/>
     <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
     <title>Hadice</title>
+    <script>
+      // 首屏前同步主题，避免模块加载前闪错色
+      (function () {
+        try {
+          var raw = localStorage.getItem('hadice-theme')
+          var theme = 'dark'
+          if (raw) {
+            var parsed = JSON.parse(raw)
+            theme = parsed && parsed.state && parsed.state.theme === 'light' ? 'light' : 'dark'
+          }
+          document.documentElement.classList.add(theme)
+          document.documentElement.classList.remove(theme === 'dark' ? 'light' : 'dark')
+          document.addEventListener('DOMContentLoaded', function () {
+            document.body.classList.add(theme)
+            document.body.classList.remove(theme === 'dark' ? 'light' : 'dark')
+          })
+        } catch (e) {}
+      })()
+    </script>
     <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
     <meta
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://appimg-drcn.dbankcdn.com https://*.dbankcdn.com; connect-src 'self' https://*.posthog.com https://*.posthog.io"
     />
 </head>
-<body class="dark" data-file-drop-target>
+<body data-file-drop-target>
 <div id="root"></div>
 <script src="./src/main.tsx" type="module"></script>
 </body>

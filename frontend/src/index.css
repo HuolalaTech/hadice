@@ -1,29 +1,104 @@
 @import "tailwindcss";
 
-/* 自定义主题变量 */
+/* class 策略暗色：html/body 上的 .dark / .light */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Tailwind 语义色 → CSS 变量（由 :root/.light/.dark 切换） */
 @theme {
-  --color-background: oklch(0.145 0 0);
-  --color-foreground: oklch(0.985 0 0);
-  --color-card: oklch(0.205 0.015 286);
-  --color-card-foreground: oklch(0.985 0 0);
-  --color-popover: oklch(0.205 0.015 286);
-  --color-popover-foreground: oklch(0.985 0 0);
-  --color-primary: oklch(0.65 0.15 50);
-  --color-primary-foreground: oklch(0.98 0.01 100);
-  --color-secondary: oklch(0.269 0.015 286);
-  --color-secondary-foreground: oklch(0.985 0 0);
-  --color-muted: oklch(0.269 0.015 286);
-  --color-muted-foreground: oklch(0.708 0.02 286);
-  --color-accent: oklch(0.269 0.015 286);
-  --color-accent-foreground: oklch(0.985 0 0);
-  --color-destructive: oklch(0.396 0.141 25);
-  --color-destructive-foreground: oklch(0.985 0 0);
-  --color-border: oklch(0.32 0.015 286);
-  --color-input: oklch(0.32 0.015 286);
-  --color-ring: oklch(0.65 0.15 50);
+  --color-background: var(--app-background);
+  --color-foreground: var(--app-foreground);
+  --color-card: var(--app-card);
+  --color-card-foreground: var(--app-card-foreground);
+  --color-popover: var(--app-popover);
+  --color-popover-foreground: var(--app-popover-foreground);
+  --color-primary: var(--app-primary);
+  --color-primary-foreground: var(--app-primary-foreground);
+  --color-secondary: var(--app-secondary);
+  --color-secondary-foreground: var(--app-secondary-foreground);
+  --color-muted: var(--app-muted);
+  --color-muted-foreground: var(--app-muted-foreground);
+  --color-accent: var(--app-accent);
+  --color-accent-foreground: var(--app-accent-foreground);
+  --color-destructive: var(--app-destructive);
+  --color-destructive-foreground: var(--app-destructive-foreground);
+  --color-border: var(--app-border);
+  --color-input: var(--app-input);
+  --color-ring: var(--app-ring);
   --radius: 0.5rem;
 
-  /* HSL 格式变量（用于 Tailwind 配置兼容，暗色主题） */
+  --font-sans: 'Inter', 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+
+/* 亮色（默认变量；无 .dark 时生效） */
+:root,
+.light {
+  --app-background: oklch(0.985 0.005 286);
+  --app-foreground: oklch(0.22 0.02 286);
+  --app-card: oklch(1 0 0);
+  --app-card-foreground: oklch(0.22 0.02 286);
+  --app-popover: oklch(1 0 0);
+  --app-popover-foreground: oklch(0.22 0.02 286);
+  --app-primary: oklch(0.65 0.15 50);
+  --app-primary-foreground: oklch(0.98 0.01 100);
+  --app-secondary: oklch(0.96 0.01 286);
+  --app-secondary-foreground: oklch(0.28 0.02 286);
+  --app-muted: oklch(0.96 0.01 286);
+  --app-muted-foreground: oklch(0.5 0.02 286);
+  --app-accent: oklch(0.96 0.01 286);
+  --app-accent-foreground: oklch(0.28 0.02 286);
+  --app-destructive: oklch(0.55 0.2 25);
+  --app-destructive-foreground: oklch(0.985 0 0);
+  --app-border: oklch(0.9 0.01 286);
+  --app-input: oklch(0.9 0.01 286);
+  --app-ring: oklch(0.65 0.15 50);
+
+  --primary: 24.6 95% 53.1%;
+  --primary-foreground: 60 9.1% 97.8%;
+  --secondary: 240 4.8% 95.9%;
+  --secondary-foreground: 240 5.9% 10%;
+  --muted: 240 4.8% 95.9%;
+  --muted-foreground: 240 3.8% 46.1%;
+  --accent: 240 4.8% 95.9%;
+  --accent-foreground: 240 5.9% 10%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 240 5.9% 90%;
+  --input: 240 5.9% 90%;
+  --ring: 24.6 95% 53.1%;
+  --background: 0 0% 98%;
+  --foreground: 240 10% 3.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 240 10% 3.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 240 10% 3.9%;
+
+  --scrollbar-thumb: oklch(0.5 0.02 286 / 0.35);
+  --scrollbar-thumb-hover: oklch(0.5 0.02 286 / 0.55);
+}
+
+/* 暗色（产品默认） */
+.dark {
+  --app-background: oklch(0.145 0 0);
+  --app-foreground: oklch(0.985 0 0);
+  --app-card: oklch(0.205 0.015 286);
+  --app-card-foreground: oklch(0.985 0 0);
+  --app-popover: oklch(0.205 0.015 286);
+  --app-popover-foreground: oklch(0.985 0 0);
+  --app-primary: oklch(0.65 0.15 50);
+  --app-primary-foreground: oklch(0.98 0.01 100);
+  --app-secondary: oklch(0.269 0.015 286);
+  --app-secondary-foreground: oklch(0.985 0 0);
+  --app-muted: oklch(0.269 0.015 286);
+  --app-muted-foreground: oklch(0.708 0.02 286);
+  --app-accent: oklch(0.269 0.015 286);
+  --app-accent-foreground: oklch(0.985 0 0);
+  --app-destructive: oklch(0.396 0.141 25);
+  --app-destructive-foreground: oklch(0.985 0 0);
+  --app-border: oklch(0.32 0.015 286);
+  --app-input: oklch(0.32 0.015 286);
+  --app-ring: oklch(0.65 0.15 50);
+
   --primary: 24.6 95% 53.1%;
   --primary-foreground: 60 9.1% 97.8%;
   --secondary: 240 3.7% 15.9%;
@@ -44,9 +119,8 @@
   --popover: 0 0% 3.9%;
   --popover-foreground: 0 0% 98%;
 
-  /* 字体配置：等宽字体使用系统栈，不随仓库分发第三方字体文件 */
-  --font-sans: 'Inter', 'Noto Sans SC', system-ui, -apple-system, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  --scrollbar-thumb: oklch(0.708 0.02 286 / 0.3);
+  --scrollbar-thumb-hover: oklch(0.708 0.02 286 / 0.5);
 }
 
 /* 基础样式 */
@@ -93,19 +167,19 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: oklch(0.708 0.02 286 / 0.3);
+  background: var(--scrollbar-thumb);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.708 0.02 286 / 0.5);
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* 滚动条始终可见（虚拟列表容器用） */
 .scrollbar-stable {
   scrollbar-gutter: stable;
   scrollbar-width: thin;
-  scrollbar-color: oklch(0.708 0.02 286 / 0.3) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 /* 防止拖拽选中 */
