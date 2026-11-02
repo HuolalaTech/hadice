@@ -275,15 +275,23 @@ export function AppInstallPage(): React.JSX.Element {
       if (isSuccess) {
         toast.success('安装成功')
       } else if (installResult.includes('downgrade')) {
-        toast.error('安装失败，无法降级安装，请先卸载')
+        toast.error('安装失败', {
+          description: allOutput || '无法降级安装，请先卸载旧版本后重试',
+          duration: 5000
+        })
       } else {
-        const errorMsg = result.error || result.output || '安装失败，若已安装请卸载旧版再尝试'
-        const finalErrorMsg = errorMsg.length > 50 ? '安装失败，若已安装请卸载旧版再尝试' : errorMsg
-        toast.error(finalErrorMsg)
+        toast.error('安装失败', {
+          description: allOutput || '未收到设备错误详情，请检查安装包和设备连接',
+          duration: 5000
+        })
       }
     } catch (error) {
       console.error('[AppInstallPage] Install app error:', error)
-      toast.error('安装失败，请检查文件路径和设备连接')
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      toast.error('安装失败', {
+        description: errorMessage || '请检查安装包路径和设备连接',
+        duration: 5000
+      })
     } finally {
       setIsInstalling(false)
     }
