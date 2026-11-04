@@ -1,20 +1,28 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { FileText, HelpCircle, Circle, Moon, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { HelpDialog } from '@/components/dialogs/HelpDialog'
 import { useDeviceStore } from '@/store/deviceStore'
 import { useThemeStore } from '@/store/themeStore'
+import * as App from '../../../bindings/Hadice/backend/appservice'
 
 /**
  * 底部状态栏组件
- * 显示连接状态、设备信息、HDC 版本、日志和帮助入口
+ * 显示连接状态、设备信息、应用版本、日志和帮助入口
  */
 export function Footer(): React.JSX.Element {
   const [helpOpen, setHelpOpen] = useState(false)
+  const [appVersion, setAppVersion] = useState('')
   const { selectedDevice, devices } = useDeviceStore()
   const theme = useThemeStore((s) => s.theme)
   const toggleTheme = useThemeStore((s) => s.toggleTheme)
+
+  useEffect(() => {
+    App.GetAppVersion()
+      .then(setAppVersion)
+      .catch(() => setAppVersion(''))
+  }, [])
 
   // 计算连接状态
   const connectedCount = devices.filter((d) => d.status === 'Connected').length
@@ -58,8 +66,14 @@ export function Footer(): React.JSX.Element {
             )}
           </span>
 
-          <Separator orientation="vertical" className="h-3" />
-
+          {appVersion ? (
+            <>
+              <Separator orientation="vertical" className="h-3" />
+              <span className="font-mono" title={`Hadice v${appVersion}`}>
+                v{appVersion}
+              </span>
+            </>
+          ) : null}
         </div>
 
         {/* 右侧操作按钮 */}
