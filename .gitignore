@@ -26,6 +26,9 @@ docs/superpowers/
 # Local release summary notes (do not commit)
 release-summary-*.md
 
+# Local agent notes (do not commit)
+AGENTS.md
+
 # Private CI / local secrets (copy from .env.ci.example)
 .env.ci
 frontend/.env
