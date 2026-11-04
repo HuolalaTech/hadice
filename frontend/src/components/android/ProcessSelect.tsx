@@ -2,6 +2,11 @@ import React, { useEffect, useState, useRef, useCallback, forwardRef, useImperat
 import { ChevronDown, Search, Loader2 } from 'lucide-react'
 import type { AndroidApp } from '@/types/hdc'
 import { networkCaptureAPI } from '@/lib/hdc-api/network-capture'
+import { reconcileAndroidCaptureApp } from '@/lib/capture-selected-app'
+import {
+  peekAndroidProcessListCache,
+  setAndroidProcessListCache,
+} from '@/lib/process-list-cache'
 
 export interface ProcessSelectHandle {
   fetchApps: () => Promise<AndroidApp[]>
@@ -20,21 +25,28 @@ export const ProcessSelect = forwardRef<ProcessSelectHandle, ProcessSelectProps>
 ) {
   const [apps, setApps] = useState<AndroidApp[]>([])
   const [loading, setLoading] = useState(false)
+  const [listFetched, setListFetched] = useState(false)
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const containerRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const appsRef = useRef(apps)
+  appsRef.current = apps
 
   const fetchApps = useCallback(async (): Promise<AndroidApp[]> => {
     if (!deviceId) return []
-    setLoading(true)
+    // 已有列表时静默刷新，按钮不转圈
+    if (appsRef.current.length === 0) setLoading(true)
     try {
       const result = await networkCaptureAPI.GetAndroidDebuggableApps(deviceId)
-      setApps(result || [])
-      return result || []
+      const list = result || []
+      setApps(list)
+      setAndroidProcessListCache(deviceId, list)
+      setListFetched(true)
+      return list
     } catch {
-      setApps([])
-      return []
+      // 失败不清空列表，避免误判已卸载
+      return appsRef.current
     } finally {
       setLoading(false)
     }
@@ -42,9 +54,36 @@ export const ProcessSelect = forwardRef<ProcessSelectHandle, ProcessSelectProps>
 
   useImperativeHandle(ref, () => ({ fetchApps }), [fetchApps])
 
+  // 切回面板：有缓存直接回显，不打设备；无缓存才拉一次
   useEffect(() => {
-    fetchApps()
-  }, [fetchApps])
+    if (!deviceId) return
+    const cached = peekAndroidProcessListCache<AndroidApp>(deviceId)
+    if (cached) {
+      setApps(cached.apps)
+      setListFetched(true)
+      return
+    }
+    setListFetched(false)
+    setApps([])
+    void fetchApps()
+  }, [deviceId, fetchApps])
+
+  // 列表成功拉取后：回填 PID；找不到则清除（已卸载）
+  useEffect(() => {
+    if (!listFetched || !value) return
+    const next = reconcileAndroidCaptureApp(value, apps)
+    if (next === null) {
+      onChange(null)
+      return
+    }
+    if (
+      next.pid !== value.pid ||
+      next.name !== value.name ||
+      next.processName !== value.processName
+    ) {
+      onChange(next)
+    }
+  }, [apps, listFetched, value, onChange])
 
   // 点击外部关闭
   useEffect(() => {
@@ -57,10 +96,10 @@ export const ProcessSelect = forwardRef<ProcessSelectHandle, ProcessSelectProps>
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // 打开时聚焦搜索框并刷新进程列表
+  // 打开下拉时才强制刷新进程列表（保证新鲜度）
   useEffect(() => {
     if (open) {
-      fetchApps()
+      void fetchApps()
       setTimeout(() => searchInputRef.current?.focus(), 0)
     } else {
       setSearch('')

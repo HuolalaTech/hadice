@@ -38,17 +38,19 @@ func (p *Provider) ListDevices(verbose bool) ([]device.Device, error) {
 		return []device.Device{}, nil
 	}
 
+	return parseDevices(result.Output, verbose), nil
+}
+
+// parseDevices 解析 adb devices 输出。
+// ponytail: 冷启动时 CombinedOutput 会混入 daemon 的 stderr 日志，必须过滤，
+// 否则 "*"/"List" 会被误报为设备；刷新后 daemon 已运行则不复现。
+func parseDevices(output string, verbose bool) []device.Device {
 	devices := []device.Device{}
-	lines := strings.Split(result.Output, "\n")
-
-	// 跳过第一行 "List of devices attached"
-	for i, line := range lines {
-		if i == 0 && strings.Contains(line, "List of devices") {
-			continue
-		}
-
+	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" {
+		// daemon 启动日志（* daemon not running/started successfully）与
+		// 表头（List of devices attached）在冷启动时不在首行，任意位置都要跳过
+		if line == "" || strings.HasPrefix(line, "*") || strings.HasPrefix(line, "List of devices") {
 			continue
 		}
 
@@ -64,15 +66,17 @@ func (p *Provider) ListDevices(verbose bool) ([]device.Device, error) {
 		connectKey := parts[0]
 		statusStr := parts[1]
 
-		// 解析状态
-		status := "Unknown"
+		// 只接受 adb 的合法设备状态，其余一律视为噪声行丢弃
+		status := ""
 		switch statusStr {
 		case "device":
 			status = "Connected"
-		case "offline":
+		case "offline", "recovery", "sideload", "bootloader", "host":
 			status = "Offline"
 		case "unauthorized":
 			status = "Unauthorized"
+		default:
+			continue
 		}
 
 		// 判断连接类型
@@ -116,7 +120,7 @@ func (p *Provider) ListDevices(verbose bool) ([]device.Device, error) {
 		})
 	}
 
-	return devices, nil
+	return devices
 }
 
 // GetVersion 获取 ADB 版本信息

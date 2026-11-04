@@ -101,7 +101,7 @@ export function TransferQueue({
                     </div>
                     {/* 状态图标 */}
                     {task.status === 'completed' && (
-                      <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                      <CheckCircle2 className="h-4 w-4 text-green-700 dark:text-green-400 flex-shrink-0" />
                     )}
                     {task.status === 'failed' && (
                       <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />

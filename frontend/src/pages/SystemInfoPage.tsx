@@ -180,7 +180,7 @@ export function SystemInfoPage(): React.JSX.Element {
                     onClick={() => handleCopy(key, value)}
                   >
                     {copiedKey === key ? (
-                      <Check className="h-3 w-3 text-green-500" />
+                      <Check className="h-3 w-3 text-green-700 dark:text-green-400" />
                     ) : (
                       <Copy className="h-3 w-3" />
                     )}

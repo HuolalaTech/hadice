@@ -4,12 +4,12 @@
 version: "3"
 
 info:
-  companyName: "huolala"
+  companyName: "Hadice"
   productName: "Hadice"
   productIdentifier: "com.haivo.hadice"
   description: "安卓&鸿蒙调试工具"
   copyright: "(c) 2026, Haivo"
-  version: "2.3.1"
+  version: "2.3.10"
 
 
 # Dev mode configuration

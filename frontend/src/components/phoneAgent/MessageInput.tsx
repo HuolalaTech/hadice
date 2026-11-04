@@ -1,11 +1,28 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { Send, Loader2, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
 import { usePhoneAgentStore } from '@/modules/phoneAgent/store'
 import { PhoneAgent } from '@/modules/phoneAgent/agent'
 import { useChatHistoryStore, generateSessionTitle } from '@/modules/phoneAgent/chatHistoryStore'
 import { useDeviceStore } from '@/store/deviceStore'
-import { usePhoneAgentConfigStore } from '@/store/phoneAgentConfigStore'
+import { providerKeyOf, usePhoneAgentConfigStore } from '@/store/phoneAgentConfigStore'
+import {
+  getEffortPreset,
+  getProviderModels,
+  getProviderPreset,
+  LLM_EFFORTS,
+  LLM_PROVIDER_PRESETS,
+  withEffort
+} from '@/modules/phoneAgent/providers'
+import { ModelPicker } from './ModelPicker'
+import type { LLMEffort, LLMProvider } from '@/modules/phoneAgent/types'
 import { toast } from 'sonner'
 
 /**
@@ -22,7 +39,60 @@ export function MessageInput(): React.JSX.Element {
   const { selectedDevice } = useDeviceStore()
   const { isRunning, sessionID, setCurrentTask, addMessage, setError, reset, messages, stepCount } =
     usePhoneAgentStore()
-  const { llmConfig, maxSteps, language } = usePhoneAgentConfigStore()
+  const {
+    llmConfig,
+    maxSteps,
+    language,
+    providerModels,
+    providerKeys,
+    providerLastModel,
+    providerBaseURLs,
+    setLLMConfig
+  } = usePhoneAgentConfigStore()
+  const activeApiKey = providerKeyOf(llmConfig.provider, providerKeys) || llmConfig.apiKey.trim()
+  const modelOptions = getProviderModels(llmConfig.provider, providerModels[llmConfig.provider])
+  const currentEffort = getEffortPreset(llmConfig.effort).id
+  const canSwitch = !isRunning && !isSending
+
+  const handleProviderChange = (provider: LLMProvider) => {
+    if (provider === llmConfig.provider) return
+    const next = getProviderPreset(provider)
+    const models = getProviderModels(provider, providerModels[provider])
+    // 切到智谱：优先 autoglm-phone；其它厂商沿用上次选择
+    const nextModel =
+      provider === 'zhipu'
+        ? models.includes(next.model)
+          ? next.model
+          : providerLastModel[provider] || models[0] || next.model
+        : providerLastModel[provider] ||
+          (models.includes(next.model) ? next.model : models[0] || next.model)
+    const nextKey = providerKeyOf(provider, providerKeys)
+    setLLMConfig(
+      withEffort(
+        {
+          ...llmConfig,
+          provider,
+          apiKey: nextKey,
+          baseURL: providerBaseURLs[provider] || next.baseURL,
+          model: nextModel
+        },
+        currentEffort
+      )
+    )
+    if (!nextKey) {
+      toast.warning(`${next.label} 还没有 Key，先打开设置保存`)
+    }
+  }
+
+  const handleModelChange = (model: string) => {
+    if (!model || model === llmConfig.model) return
+    setLLMConfig({ ...llmConfig, model })
+  }
+
+  const handleEffortChange = (effort: LLMEffort) => {
+    if (effort === currentEffort) return
+    setLLMConfig(withEffort(llmConfig, effort))
+  }
   const { addSession } = useChatHistoryStore()
 
   // 监听消息变化，在任务完成时自动保存
@@ -75,7 +145,7 @@ export function MessageInput(): React.JSX.Element {
       maxSteps,
       deviceID: selectedDevice.connectKey,
       platform: selectedDevice.platform,
-      llmConfig,
+      llmConfig: { ...llmConfig, apiKey: activeApiKey },
       language,
     })
 
@@ -92,10 +162,14 @@ export function MessageInput(): React.JSX.Element {
         newAgent.stop().catch(console.error)
       }
     }
-  }, [selectedDevice, llmConfig, maxSteps, language, reset])
+  }, [selectedDevice, llmConfig, activeApiKey, maxSteps, language, reset])
 
   const handleSend = useCallback(async () => {
     if (!message.trim() || isSending || !agent || !selectedDevice) {
+      return
+    }
+    if (!activeApiKey) {
+      toast.error('当前厂商没有 API Key，先打开设置保存')
       return
     }
 
@@ -277,12 +351,53 @@ export function MessageInput(): React.JSX.Element {
           )}
         </Button>
       </div>
-      {(isRunning || isSending) && (
-        <div className="mt-2 text-xs text-muted-foreground flex items-center gap-2">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          {isRunning ? 'AI正在执行任务中...' : '正在发送...'}
-        </div>
-      )}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        {(isRunning || isSending) && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+            <span>{isRunning ? 'AI正在执行任务中...' : '正在发送...'}</span>
+          </div>
+        )}
+        <Select
+          value={llmConfig.provider}
+          onValueChange={(value) => handleProviderChange(value as LLMProvider)}
+          disabled={!canSwitch}
+        >
+          <SelectTrigger className="h-8 w-[108px] text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {LLM_PROVIDER_PRESETS.map((item) => (
+              <SelectItem key={item.id} value={item.id} className="text-xs">
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <ModelPicker
+          value={llmConfig.model}
+          models={modelOptions}
+          onChange={handleModelChange}
+          disabled={!canSwitch}
+          className="min-w-[180px] flex-1"
+        />
+        <Select
+          value={currentEffort}
+          onValueChange={(value) => handleEffortChange(value as LLMEffort)}
+          disabled={!canSwitch}
+        >
+          <SelectTrigger className="h-8 w-[118px] text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {LLM_EFFORTS.map((item) => (
+              <SelectItem key={item.id} value={item.id} className="text-xs">
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
     </div>
   )
 }

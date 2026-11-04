@@ -145,7 +145,7 @@ export function MessageList(): React.JSX.Element {
                           {pair.action.result && (
                             <div className="text-xs text-muted-foreground/80 flex items-start gap-2">
                               <span className="text-xs text-muted-foreground">执行结果：</span>
-                              <span className="text-green-600 dark:text-green-400 font-medium">{pair.action.result}</span>
+                              <span className="text-green-700 dark:text-green-400 font-medium">{pair.action.result}</span>
                             </div>
                           )}
                         </div>
@@ -154,7 +154,7 @@ export function MessageList(): React.JSX.Element {
                       {/* 最后一个卡片显示任务完成提示 */}
                       {index === stepPairs.length - 1 && message.isFinished && (
                         <div className="flex items-center gap-2 text-sm mt-3">
-                          <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
+                          <CheckCircle2 className="h-5 w-5 text-green-700 dark:text-green-400 flex-shrink-0" />
                           <span className="font-medium text-foreground">任务已完成</span>
                         </div>
                       )}

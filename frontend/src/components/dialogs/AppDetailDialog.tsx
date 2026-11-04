@@ -189,8 +189,8 @@ export function AppDetailDialog({
                 {app.packageName}
               </div>
               {app.isRunning && (
-                <div className="text-xs text-green-500 flex items-center gap-1 mt-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                <div className="text-xs text-green-700 dark:text-green-400 flex items-center gap-1 mt-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-600 dark:bg-green-500" />
                   运行中
                 </div>
               )}
@@ -262,7 +262,7 @@ export function AppDetailDialog({
                     <span className="text-sm text-muted-foreground">启用状态</span>
                     <div className="text-sm mt-1">
                       {(appDetail?.isEnabled ?? app.isEnabled) ? (
-                        <span className="text-green-500">已启用</span>
+                        <span className="text-green-700 dark:text-green-400">已启用</span>
                       ) : (
                         <span className="text-red-500">已禁用</span>
                       )}

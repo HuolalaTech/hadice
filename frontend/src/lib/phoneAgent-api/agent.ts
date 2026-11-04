@@ -5,7 +5,7 @@
 import * as App from '../../../bindings/Hadice/backend/appservice'
 import { phoneAgent } from '../../../wailsjs/go/models'
 import { EventsOn, EventsOff } from '../../../wailsjs/runtime/runtime'
-import type { AgentConfig, StepResult, StreamChunk } from '@/modules/phoneAgent/types'
+import type { AgentConfig, LLMConfig, StepResult, StreamChunk } from '@/modules/phoneAgent/types'
 
 /**
  * PhoneAgent API
@@ -115,6 +115,30 @@ export const phoneAgentAPI = {
         callback(data[0] as StreamChunk)
       }
     })
+  },
+
+  testConnection: async (
+    config: LLMConfig,
+  ): Promise<{ success: boolean; message: string; models: string[] }> => {
+    const llmConfig = phoneAgent.LLMConfig.createFrom({
+      provider: config.provider,
+      apiKey: config.apiKey,
+      baseURL: config.baseURL || '',
+      model: config.model,
+      maxTokens: config.maxTokens,
+      temperature: config.temperature !== undefined ? config.temperature : 0.0,
+      topP: config.topP !== undefined ? config.topP : 0.85,
+    })
+    const result = (await App.TestLLMConnection(llmConfig)) as {
+      success?: boolean
+      message?: string
+      models?: string[]
+    }
+    return {
+      success: result.success === true,
+      message: result.message || (result.success ? '连接成功' : '连接失败'),
+      models: Array.isArray(result.models) ? result.models.filter(Boolean) : [],
+    }
   },
 
   /**

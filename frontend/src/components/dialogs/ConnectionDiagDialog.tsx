@@ -494,10 +494,10 @@ export function ConnectionDiagDialog({
                         key={index}
                         className={`flex ${
                           log.type === 'error'
-                            ? 'text-red-400'
+                            ? 'text-red-600 dark:text-red-400'
                             : log.type === 'success'
-                              ? 'text-green-400'
-                              : ''
+                              ? 'text-green-700 dark:text-green-400'
+                              : 'text-foreground'
                         }`}
                       >
                         <span className="text-muted-foreground">[{log.time}]</span>

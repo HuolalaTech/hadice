@@ -29,7 +29,9 @@ export function Footer(): React.JSX.Element {
           <div className="flex items-center gap-1.5">
             <Circle
               className={`h-2 w-2 ${
-                isConnected ? 'fill-green-500 text-green-500' : 'fill-red-500 text-red-500'
+                isConnected
+                  ? 'fill-green-600 text-green-600 dark:fill-green-500 dark:text-green-500'
+                  : 'fill-red-600 text-red-600 dark:fill-red-500 dark:text-red-500'
               }`}
             />
             <span>{isConnected ? `已连接 (${connectedCount})` : '未连接'}</span>
@@ -47,8 +49,8 @@ export function Footer(): React.JSX.Element {
               <span
                 className={`ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[11px] leading-none align-middle -translate-y-[1px] ${
                   selectedDevice.platform === 'harmonyos'
-                    ? 'bg-blue-500/20 text-blue-400'
-                    : 'bg-green-500/20 text-green-400'
+                    ? 'bg-blue-600/15 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400'
+                    : 'bg-green-700/15 text-green-700 dark:bg-green-500/20 dark:text-green-400'
                 }`}
               >
                 {selectedDevice.platform === 'harmonyos' ? '鸿蒙' : '安卓'}

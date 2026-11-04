@@ -48,6 +48,86 @@ export const shellAPI = {
     }
   },
 
+  restartShell: async (shellId: string): Promise<boolean> => {
+    try {
+      return await App.RestartShell(shellId)
+    } catch (error) {
+      console.error('[HDC API] restartShell failed:', error)
+      throw error
+    }
+  },
+
+  getShellScrollback: async (shellId: string): Promise<string> => {
+    try {
+      return (await App.GetShellScrollback(shellId)) || ''
+    } catch (error) {
+      console.error('[HDC API] getShellScrollback failed:', error)
+      return ''
+    }
+  },
+
+  getShellUIState: async (): Promise<{
+    tabs: Array<{ id: string; title: string }>
+    activeTabId: string
+    tabSeq: number
+    snapshots: Record<string, string>
+  }> => {
+    try {
+      const state = await App.GetShellUIState()
+      return {
+        tabs: (state?.tabs ?? []).map((t) => ({
+          id: t?.id ?? '',
+          title: t?.title ?? ''
+        })),
+        activeTabId: state?.activeTabId ?? '',
+        tabSeq: state?.tabSeq ?? 0,
+        snapshots: { ...(state?.snapshots ?? {}) }
+      }
+    } catch (error) {
+      console.error('[HDC API] getShellUIState failed:', error)
+      return { tabs: [], activeTabId: '', tabSeq: 0, snapshots: {} }
+    }
+  },
+
+  setShellUIState: async (state: {
+    tabs: Array<{ id: string; title: string }>
+    activeTabId: string
+    tabSeq: number
+    snapshots: Record<string, string>
+  }): Promise<void> => {
+    try {
+      await App.SetShellUIState(state)
+    } catch (error) {
+      console.error('[HDC API] setShellUIState failed:', error)
+    }
+  },
+
+  getShellSnapshot: async (shellId: string): Promise<string> => {
+    try {
+      return (await App.GetShellSnapshot(shellId)) || ''
+    } catch (error) {
+      console.error('[HDC API] getShellSnapshot failed:', error)
+      return ''
+    }
+  },
+
+  setShellSnapshot: async (shellId: string, snapshot: string): Promise<void> => {
+    try {
+      await App.SetShellSnapshot(shellId, snapshot)
+    } catch (error) {
+      console.error('[HDC API] setShellSnapshot failed:', error)
+    }
+  },
+
+  isShellRunning: async (shellId: string): Promise<boolean> => {
+    try {
+      return await App.IsShellRunning(shellId)
+    } catch (error) {
+      console.error('[HDC API] isShellRunning failed:', error)
+      return false
+    }
+  },
+
   stopAllShells: async (): Promise<{ success: boolean }> => {
     try {
       await App.StopAllShells()

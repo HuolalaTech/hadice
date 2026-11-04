@@ -1,6 +1,13 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { captureEvent } from '@/lib/posthog'
-import { Terminal as TerminalIcon, RefreshCw, Plus, ChevronDown, Trash2 } from 'lucide-react'
+import {
+  Terminal as TerminalIcon,
+  RefreshCw,
+  Plus,
+  ChevronDown,
+  Trash2,
+  X
+} from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -13,382 +20,566 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { SerializeAddon } from '@xterm/addon-serialize'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { AddCommandDialog } from '@/components/dialogs/AddCommandDialog'
 import { WindowToggleButton } from '@/components/layout/WindowToggleButton'
 import { HelpToggleButton } from '@/components/layout/HelpToggleButton'
 import { useCommandStore } from '@/store/commandStore'
+import {
+  SHELL_FLUSH_EVENT,
+  useShellSessionStore
+} from '@/store/shellSessionStore'
+import { peekShellHandoff } from '@/lib/shell-handoff'
 import { isHdcAvailable } from '@/lib/hdc'
 import { getTerminalTheme } from '@/lib/theme'
 import { useThemeStore } from '@/store/themeStore'
+import { cn } from '@/lib/utils'
 import '@xterm/xterm/css/xterm.css'
 
+/** xterm-v1:COLxROW:serialized —— 按原尺寸回放，再 fit 到当前窗口 */
+const SHELL_SNAPSHOT_PREFIX = 'xterm-v1:'
+
+function encodeShellSnapshot(terminal: Terminal, serializeAddon: SerializeAddon): string {
+  return `${SHELL_SNAPSHOT_PREFIX}${terminal.cols}x${terminal.rows}:${serializeAddon.serialize()}`
+}
+
+function decodeShellSnapshot(
+  snapshot: string
+): { cols: number; rows: number; data: string } | null {
+  if (!snapshot.startsWith(SHELL_SNAPSHOT_PREFIX)) return null
+  const rest = snapshot.slice(SHELL_SNAPSHOT_PREFIX.length)
+  const match = /^(\d+)x(\d+):([\s\S]*)$/.exec(rest)
+  if (match) {
+    return {
+      cols: Number(match[1]),
+      rows: Number(match[2]),
+      data: match[3]
+    }
+  }
+  // 兼容旧格式 xterm-v1:<serialized>
+  return { cols: 0, rows: 0, data: rest }
+}
+
+async function pushShellUIStateToBackend(): Promise<void> {
+  if (!isHdcAvailable()) return
+  const state = useShellSessionStore.getState().toBackendState()
+  await window.hdc.setShellUIState(state)
+}
+
+async function pullShellUIStateFromBackend(): Promise<void> {
+  // 优先用主窗已收下的 handoff（回切瞬间），再 Get 后端
+  const handoff = peekShellHandoff(true)
+  if (handoff?.tabs?.length) {
+    useShellSessionStore.getState().applyBackendState(handoff)
+    return
+  }
+  if (!isHdcAvailable()) return
+  const state = await window.hdc.getShellUIState()
+  if (state.tabs.length > 0) {
+    useShellSessionStore.getState().applyBackendState(state)
+  } else {
+    useShellSessionStore.setState({ hydrated: true })
+  }
+}
+
+function waitForContainerSize(
+  el: HTMLElement,
+  timeoutMs = 2000
+): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    const ready = (): boolean => el.clientWidth >= 40 && el.clientHeight >= 40
+    if (ready()) {
+      resolve({ width: el.clientWidth, height: el.clientHeight })
+      return
+    }
+    const started = Date.now()
+    const observer = new ResizeObserver(() => {
+      if (ready()) {
+        observer.disconnect()
+        resolve({ width: el.clientWidth, height: el.clientHeight })
+      }
+    })
+    observer.observe(el)
+    const timer = window.setInterval(() => {
+      if (ready() || Date.now() - started > timeoutMs) {
+        window.clearInterval(timer)
+        observer.disconnect()
+        resolve({ width: el.clientWidth, height: el.clientHeight })
+      }
+    }, 50)
+  })
+}
+
+interface HdcShellPageProps {
+  /** 页面是否可见（keep-alive 隐藏时仍为 false，用于 fit） */
+  visible?: boolean
+}
+
+interface ShellSessionPaneProps {
+  shellId: string
+  active: boolean
+  pageVisible: boolean
+  restartToken: number
+}
+
 /**
- * 终端命令页面
- * 使用平台 PTY（Windows ConPTY、Unix PTY）与 xterm.js 提供交互式本地终端
+ * 单个终端会话。
+ * 卸载时只退订事件，不杀 PTY，便于主窗 / 独立窗切换后附着同一会话。
  */
-export function HdcShellPage(): React.JSX.Element {
-
-  // 终端相关引用
-  const terminalRef = useRef<HTMLDivElement>(null)
-  const terminalInstanceRef = useRef<Terminal | null>(null)
+function ShellSessionPane({
+  shellId,
+  active,
+  pageVisible,
+  restartToken
+}: ShellSessionPaneProps): React.JSX.Element {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
-  const shellIdRef = useRef<string>('local-shell-1')
-  const isShellRunningRef = useRef<boolean>(false)
-  // 事件监听器清理函数引用
-  const stdoutUnsubscribeRef = useRef<(() => void) | null>(null)
-  const exitUnsubscribeRef = useRef<(() => void) | null>(null)
-  const errorUnsubscribeRef = useRef<(() => void) | null>(null)
-  // 用于跟踪组件是否已卸载
-  const isMountedRef = useRef<boolean>(true)
-
-  // 状态
-  const [isTerminalReady, setIsTerminalReady] = useState(false)
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-
-  // 快捷命令 store
-  const { getAllCommands, removeCommand } = useCommandStore()
+  const serializeAddonRef = useRef<SerializeAddon | null>(null)
+  const runningRef = useRef(false)
+  const lifecycleRef = useRef(0)
+  const snapshotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const unsubsRef = useRef<Array<() => void>>([])
   const theme = useThemeStore((s) => s.theme)
-  
-  // 获取所有命令（内置 + 自定义）
-  const allCommands = useMemo(() => getAllCommands(), [getAllCommands])
-  
-  // 分离内置命令和自定义命令
-  const builtInCommands = useMemo(() => allCommands.filter(cmd => cmd.id.startsWith('builtin-')), [allCommands])
-  const customCommands = useMemo(() => allCommands.filter(cmd => cmd.id.startsWith('custom-')), [allCommands])
+  const lastRestartTokenRef = useRef(restartToken)
+  const setSnapshot = useShellSessionStore((s) => s.setSnapshot)
+  const clearSnapshot = useShellSessionStore((s) => s.clearSnapshot)
 
-  /**
-   * 初始化 xterm.js 终端
-   */
+  const cleanupUnsubs = useCallback(() => {
+    for (const unsub of unsubsRef.current) unsub()
+    unsubsRef.current = []
+  }, [])
+
+  const fitAndResize = useCallback(async () => {
+    try {
+      const el = containerRef.current
+      if (!el || el.clientWidth < 40 || el.clientHeight < 40) return
+      fitAddonRef.current?.fit()
+      const dimensions = fitAddonRef.current?.proposeDimensions()
+      if (dimensions && dimensions.cols > 2 && dimensions.rows > 2) {
+        await window.hdc.resizeShell(shellId, dimensions.cols, dimensions.rows)
+      }
+    } catch {
+      // ignore fit races while hidden
+    }
+  }, [shellId])
+
+  const saveSnapshot = useCallback(() => {
+    if (!terminalRef.current || !serializeAddonRef.current) return
+    try {
+      const encoded = encodeShellSnapshot(
+        terminalRef.current,
+        serializeAddonRef.current
+      )
+      if (!encoded || encoded.length < SHELL_SNAPSHOT_PREFIX.length + 4) return
+      setSnapshot(shellId, encoded)
+      void window.hdc.setShellSnapshot(shellId, encoded)
+    } catch {
+      // terminal may be disposing
+    }
+  }, [shellId, setSnapshot])
+
+  const scheduleSnapshot = useCallback(() => {
+    if (snapshotTimerRef.current) clearTimeout(snapshotTimerRef.current)
+    snapshotTimerRef.current = setTimeout(saveSnapshot, 80)
+  }, [saveSnapshot])
+
+  const subscribeAndStart = useCallback(async (lifecycle: number) => {
+    if (!isHdcAvailable()) return
+
+    cleanupUnsubs()
+
+    try {
+      if (containerRef.current) {
+        await waitForContainerSize(containerRef.current)
+      }
+      if (lifecycleRef.current !== lifecycle) return
+      // 有尺寸后再 fit，避免 0 高清屏
+      await fitAndResize()
+      if (lifecycleRef.current !== lifecycle) return
+
+      const wasRunning = await window.hdc.isShellRunning(shellId)
+      if (lifecycleRef.current !== lifecycle) return
+
+      const pendingStdout: string[] = []
+      let acceptingLive = !wasRunning
+
+      const subscribe = (): void => {
+        const onStdout = window.hdc.onShellStdout(shellId, (data: string) => {
+          if (lifecycleRef.current !== lifecycle) return
+          if (!acceptingLive) {
+            pendingStdout.push(data)
+            return
+          }
+          terminalRef.current?.write(data, scheduleSnapshot)
+        })
+        const onExit = window.hdc.onShellExit(
+          shellId,
+          (data: { code: number | null; signal: string | null }) => {
+            if (lifecycleRef.current !== lifecycle) return
+            runningRef.current = false
+            cleanupUnsubs()
+            const codeStr = data.code !== null ? String(data.code) : 'unknown'
+            const signalStr = data.signal || ''
+            terminalRef.current?.writeln(
+              `\r\n\x1b[33m[进程退出] 退出码: ${codeStr}${signalStr ? `, 信号: ${signalStr}` : ''}\x1b[0m\r\n`
+            )
+            scheduleSnapshot()
+          }
+        )
+        unsubsRef.current = [onStdout, onExit]
+      }
+
+      subscribe()
+
+      const success = await window.hdc.startShell(shellId)
+      if (lifecycleRef.current !== lifecycle) return
+      if (!success) {
+        runningRef.current = false
+        cleanupUnsubs()
+        terminalRef.current?.writeln('\r\n\x1b[31m[错误] 无法启动终端进程\x1b[0m\r\n')
+        return
+      }
+      runningRef.current = true
+
+      if (wasRunning && terminalRef.current) {
+        const fromStore = useShellSessionStore.getState().snapshots[shellId] || ''
+        const fromBackend = (await window.hdc.getShellSnapshot(shellId)) || ''
+        const snapshot = fromStore || fromBackend
+        if (lifecycleRef.current !== lifecycle) return
+
+        const decoded = decodeShellSnapshot(snapshot)
+        if (decoded?.data) {
+          terminalRef.current.reset()
+          if (decoded.cols > 2 && decoded.rows > 2) {
+            terminalRef.current.resize(decoded.cols, decoded.rows)
+          }
+          await new Promise<void>((resolve) => {
+            terminalRef.current?.write(decoded.data, () => resolve())
+          })
+          terminalRef.current.scrollToBottom()
+        } else {
+          // serialize 缺失时回退 raw scrollback，总比空白强
+          const scrollback = await window.hdc.getShellScrollback(shellId)
+          if (lifecycleRef.current !== lifecycle) return
+          terminalRef.current.reset()
+          if (scrollback) {
+            await new Promise<void>((resolve) => {
+              terminalRef.current?.write(scrollback, () => resolve())
+            })
+            terminalRef.current.scrollToBottom()
+          } else {
+            await window.hdc.writeToShell(shellId, '\x0c')
+          }
+        }
+        acceptingLive = true
+        for (const chunk of pendingStdout) {
+          terminalRef.current?.write(chunk)
+        }
+        pendingStdout.length = 0
+        scheduleSnapshot()
+      }
+
+      // 布局稳定后再 fit 一两次
+      await fitAndResize()
+      requestAnimationFrame(() => {
+        void fitAndResize()
+      })
+    } catch (error) {
+      runningRef.current = false
+      cleanupUnsubs()
+      terminalRef.current?.writeln(
+        `\r\n\x1b[31m[错误] ${error instanceof Error ? error.message : String(error)}\x1b[0m\r\n`
+      )
+    }
+  }, [
+    shellId,
+    cleanupUnsubs,
+    fitAndResize,
+    scheduleSnapshot
+  ])
+
   useEffect(() => {
-    if (!terminalRef.current || !isHdcAvailable()) return
+    if (!containerRef.current || !isHdcAvailable()) return
 
-    // 创建终端实例
+    const lifecycle = ++lifecycleRef.current
     const terminal = new Terminal({
       theme: getTerminalTheme(useThemeStore.getState().theme),
-      fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+      fontFamily:
+        "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
       fontSize: 13,
       lineHeight: 1.2,
       cursorBlink: true,
-      cursorStyle: 'block',
-      scrollback: 1000,
-      disableStdin: false, // 允许输入
+      cursorStyle: 'bar',
+      cursorWidth: 2,
+      scrollback: 5000,
+      disableStdin: false,
       allowProposedApi: true,
       convertEol: true,
       windowsMode: false
     })
-
-    // 创建并加载 addons
     const fitAddon = new FitAddon()
-    const webLinksAddon = new WebLinksAddon()
-    const unicode11Addon = new Unicode11Addon()
-
+    const serializeAddon = new SerializeAddon()
     terminal.loadAddon(fitAddon)
-    terminal.loadAddon(webLinksAddon)
+    terminal.loadAddon(serializeAddon)
+    terminal.loadAddon(new WebLinksAddon())
+    const unicode11Addon = new Unicode11Addon()
     terminal.loadAddon(unicode11Addon)
     terminal.unicode.activeVersion = '11'
+    terminal.open(containerRef.current)
 
-    // 打开终端
-    terminal.open(terminalRef.current)
-
-    // 适配终端大小
-    const fitTerminal = () => {
-      try {
-        fitAddon.fit()
-        // 通知主进程调整 PTY 大小
-        if (isShellRunningRef.current && terminalInstanceRef.current) {
-          const dimensions = fitAddon.proposeDimensions()
-          if (dimensions) {
-            window.hdc.resizeShell(shellIdRef.current, dimensions.cols, dimensions.rows).catch((err) => {
-              console.error('[HdcShell] Failed to resize shell:', err)
-            })
-          }
-        }
-      } catch (error) {
-        console.warn('[HdcShell] Failed to fit terminal:', error)
-      }
-    }
-
-    // 延迟适配，确保容器已渲染
-    setTimeout(fitTerminal, 100)
-
-    // 保存引用
-    terminalInstanceRef.current = terminal
+    terminalRef.current = terminal
     fitAddonRef.current = fitAddon
+    serializeAddonRef.current = serializeAddon
 
-    // 监听窗口大小变化
-    const handleResize = () => {
-      fitTerminal()
-    }
-    window.addEventListener('resize', handleResize)
-
-    // 使用 ResizeObserver 监听容器大小变化
-    const resizeObserver = new ResizeObserver(() => {
-      fitTerminal()
-    })
-    if (terminalRef.current) {
-      resizeObserver.observe(terminalRef.current)
-    }
-
-    // 监听用户输入
-    terminal.onData((data: string) => {
-      if (isShellRunningRef.current) {
-        window.hdc.writeToShell(shellIdRef.current, data).catch((err) => {
-          console.error('[HdcShell] Failed to write to shell:', err)
-        })
+    const inputDisposable = terminal.onData((data: string) => {
+      if (lifecycleRef.current === lifecycle && runningRef.current) {
+        void window.hdc.writeToShell(shellId, data)
       }
     })
 
-    setIsTerminalReady(true)
-
-    // 清理函数
-    return () => {
-      window.removeEventListener('resize', handleResize)
-      resizeObserver.disconnect()
-      terminal.dispose()
-      terminalInstanceRef.current = null
-      fitAddonRef.current = null
+    // fish / vim 等会发 DECSCUSR 把光标改回 block，写入后强制锁回细竖线
+    const lockBarCursor = (): void => {
+      if (terminal.options.cursorStyle !== 'bar') {
+        terminal.options.cursorStyle = 'bar'
+      }
+      if (terminal.options.cursorWidth !== 2) {
+        terminal.options.cursorWidth = 2
+      }
     }
-  }, [])
+    const writeParsedDisposable = terminal.onWriteParsed(lockBarCursor)
 
-  // 主题切换时更新终端配色（不重建 PTY）
+    const onResize = () => {
+      void fitAndResize()
+    }
+    window.addEventListener('resize', onResize)
+    const observer = new ResizeObserver(() => {
+      void fitAndResize()
+    })
+    observer.observe(containerRef.current)
+
+    const onFlush = (): void => {
+      saveSnapshot()
+    }
+    window.addEventListener(SHELL_FLUSH_EVENT, onFlush)
+
+    void subscribeAndStart(lifecycle)
+    void fitAndResize()
+
+    return () => {
+      // 先使所有尚未完成的异步初始化和回调失效，再释放资源。
+      if (lifecycleRef.current === lifecycle) lifecycleRef.current += 1
+      window.removeEventListener('resize', onResize)
+      window.removeEventListener(SHELL_FLUSH_EVENT, onFlush)
+      observer.disconnect()
+      inputDisposable.dispose()
+      writeParsedDisposable.dispose()
+      if (snapshotTimerRef.current) {
+        clearTimeout(snapshotTimerRef.current)
+        snapshotTimerRef.current = null
+      }
+      saveSnapshot()
+      cleanupUnsubs()
+      // ponytail: 不在此 stopShell，PTY 留给另一窗口附着；关 Tab / 重启才杀
+      terminal.dispose()
+      terminalRef.current = null
+      fitAddonRef.current = null
+      serializeAddonRef.current = null
+      runningRef.current = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shellId])
+
+  // 仅「重启终端」清屏并重建 PTY
   useEffect(() => {
-    if (terminalInstanceRef.current) {
-      terminalInstanceRef.current.options.theme = getTerminalTheme(theme)
+    if (restartToken === lastRestartTokenRef.current) return
+    lastRestartTokenRef.current = restartToken
+
+    const run = async (): Promise<void> => {
+      cleanupUnsubs()
+      clearSnapshot(shellId)
+      terminalRef.current?.clear()
+      try {
+        await window.hdc.restartShell(shellId)
+        runningRef.current = true
+        const onStdout = window.hdc.onShellStdout(shellId, (data: string) => {
+          terminalRef.current?.write(data, scheduleSnapshot)
+        })
+        const onExit = window.hdc.onShellExit(
+          shellId,
+          (data: { code: number | null; signal: string | null }) => {
+            runningRef.current = false
+            cleanupUnsubs()
+            const codeStr = data.code !== null ? String(data.code) : 'unknown'
+            const signalStr = data.signal || ''
+            terminalRef.current?.writeln(
+              `\r\n\x1b[33m[进程退出] 退出码: ${codeStr}${signalStr ? `, 信号: ${signalStr}` : ''}\x1b[0m\r\n`
+            )
+          }
+        )
+        unsubsRef.current = [onStdout, onExit]
+        await fitAndResize()
+      } catch (error) {
+        runningRef.current = false
+        terminalRef.current?.writeln(
+          `\r\n\x1b[31m[错误] ${error instanceof Error ? error.message : String(error)}\x1b[0m\r\n`
+        )
+      }
+    }
+    void run()
+  }, [
+    restartToken,
+    shellId,
+    cleanupUnsubs,
+    clearSnapshot,
+    fitAndResize,
+    scheduleSnapshot
+  ])
+
+  useEffect(() => {
+    if (terminalRef.current) {
+      terminalRef.current.options.theme = getTerminalTheme(theme)
     }
   }, [theme])
 
-  /**
-   * 清理事件监听器
-   */
-  const cleanupEventListeners = useCallback(() => {
-    if (stdoutUnsubscribeRef.current) {
-      stdoutUnsubscribeRef.current()
-      stdoutUnsubscribeRef.current = null
-    }
-    if (exitUnsubscribeRef.current) {
-      exitUnsubscribeRef.current()
-      exitUnsubscribeRef.current = null
-    }
-    if (errorUnsubscribeRef.current) {
-      errorUnsubscribeRef.current()
-      errorUnsubscribeRef.current = null
-    }
-  }, [])
-
-  /**
-   * 启动 shell 进程
-   */
-  const startShell = useCallback(async () => {
-    if (!isHdcAvailable() || isShellRunningRef.current || !isMountedRef.current) return
-
-    // 先清理旧的事件监听器，防止内存泄漏
-    cleanupEventListeners()
-    isShellRunningRef.current = true
-
-    try {
-      // 先订阅事件，避免漏掉 cmd.exe / ConPTY 启动时立即输出的提示符。
-      stdoutUnsubscribeRef.current = window.hdc.onShellStdout(shellIdRef.current, (data: string) => {
-        if (terminalInstanceRef.current && isMountedRef.current) {
-          terminalInstanceRef.current.write(data)
-        }
-      })
-
-      // 监听 shell 退出
-      exitUnsubscribeRef.current = window.hdc.onShellExit(shellIdRef.current, (data: { code: number | null; signal: string | null }) => {
-        if (!isMountedRef.current) {
-          return
-        }
-
-        isShellRunningRef.current = false
-        if (terminalInstanceRef.current) {
-          const codeStr = data.code !== null ? String(data.code) : 'unknown'
-          const signalStr = data.signal || ''
-          const exitMsg = `\r\n\x1b[33m[进程退出] 退出码: ${codeStr}${signalStr ? `, 信号: ${signalStr}` : ''}\x1b[0m\r\n`
-          terminalInstanceRef.current.writeln(exitMsg)
-        }
-        // 清理所有事件监听器
-        cleanupEventListeners()
-      })
-
-      // 监听 shell 错误
-      errorUnsubscribeRef.current = window.hdc.onShellError(shellIdRef.current, (error: string) => {
-        if (!isMountedRef.current) {
-          return
-        }
-
-        if (terminalInstanceRef.current) {
-          terminalInstanceRef.current.writeln(`\r\n\x1b[31m[错误] ${error}\x1b[0m\r\n`)
-        }
-        isShellRunningRef.current = false
-        // 清理所有事件监听器
-        cleanupEventListeners()
-      })
-
-      const success = await window.hdc.startShell(shellIdRef.current)
-      if (!success) {
-        isShellRunningRef.current = false
-        cleanupEventListeners()
-        console.error('[HdcShell] Failed to start shell')
-        if (terminalInstanceRef.current && isMountedRef.current) {
-          terminalInstanceRef.current.writeln('\r\n\x1b[31m[错误] 无法启动终端进程\x1b[0m\r\n')
-        }
-        return
-      }
-
-      // 若启动请求完成前页面已卸载，再清理一次，覆盖 StopShell 早于 StartShell 入表的情况。
-      if (!isMountedRef.current) {
-        await window.hdc.stopShell(shellIdRef.current).catch(() => undefined)
-        isShellRunningRef.current = false
-        cleanupEventListeners()
-        return
-      }
-
-      // shell 可能在启动请求返回前已经退出；退出监听器会将该状态置为 false。
-      if (!isShellRunningRef.current) {
-        return
-      }
-
-      // 适配终端大小
-      if (fitAddonRef.current && terminalInstanceRef.current) {
-        setTimeout(() => {
-          try {
-            fitAddonRef.current?.fit()
-            const dimensions = fitAddonRef.current?.proposeDimensions()
-            if (dimensions) {
-              window.hdc.resizeShell(shellIdRef.current, dimensions.cols, dimensions.rows).catch((err) => {
-                console.error('[HdcShell] Failed to resize shell:', err)
-              })
-            }
-          } catch (error) {
-            console.warn('[HdcShell] Failed to fit terminal after shell start:', error)
-          }
-        }, 300)
-      }
-    } catch (error) {
-      isShellRunningRef.current = false
-      console.error('[HdcShell] Error starting shell:', error)
-      if (terminalInstanceRef.current && isMountedRef.current) {
-        terminalInstanceRef.current.writeln(`\r\n\x1b[31m[错误] ${error instanceof Error ? error.message : String(error)}\x1b[0m\r\n`)
-      }
-      // 清理事件监听器（如果已注册）
-      cleanupEventListeners()
-    }
-  }, [cleanupEventListeners])
-
-  /**
-   * 重启 shell
-   */
-  const restartShell = useCallback(async () => {
-    captureEvent('shell restarted')
-    if (isShellRunningRef.current) {
-      try {
-        // 先清理事件监听器
-        cleanupEventListeners()
-        await window.hdc.stopShell(shellIdRef.current)
-        isShellRunningRef.current = false
-      } catch (error) {
-        console.error('[HdcShell] Error stopping shell:', error)
-      }
-    }
-
-    // 清空终端
-    if (terminalInstanceRef.current && isMountedRef.current) {
-      terminalInstanceRef.current.clear()
-    }
-
-    // 等待一小段时间后重新启动
-    setTimeout(() => {
-      if (isMountedRef.current) {
-        startShell()
-      }
-    }, 200)
-  }, [startShell, cleanupEventListeners])
-
-  /**
-   * 当终端就绪后启动 shell
-   */
   useEffect(() => {
-    if (isTerminalReady && !isShellRunningRef.current) {
-      startShell()
+    if (active && pageVisible) {
+      const timer = setTimeout(() => {
+        void fitAndResize()
+      }, 50)
+      return () => clearTimeout(timer)
     }
-  }, [isTerminalReady, startShell])
+  }, [active, pageVisible, fitAndResize])
 
-  /**
-   * 组件卸载时清理 shell 和事件监听器
-   */
+  return (
+    <div
+      ref={containerRef}
+      className="w-full h-full p-2"
+      style={{ minHeight: 0, minWidth: 0 }}
+    />
+  )
+}
+
+/**
+ * 终端命令页面
+ * keep-alive + 多 Tab；主窗/独立窗通过持久化 shellId 附着同一后端会话
+ */
+export function HdcShellPage({ visible = true }: HdcShellPageProps): React.JSX.Element {
+  const tabs = useShellSessionStore((s) => s.tabs)
+  const activeTabId = useShellSessionStore((s) => s.activeTabId)
+  const ensureDefaultTab = useShellSessionStore((s) => s.ensureDefaultTab)
+  const addTab = useShellSessionStore((s) => s.addTab)
+  const closeTabInStore = useShellSessionStore((s) => s.closeTab)
+  const setActiveTabId = useShellSessionStore((s) => s.setActiveTabId)
+
+  const [restartTokens, setRestartTokens] = useState<Record<string, number>>({})
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  // 必须等后端 UI state 拉齐后再挂 xterm，避免用内存里的旧 shellId/快照
+  const [ready, setReady] = useState(false)
+
   useEffect(() => {
-    isMountedRef.current = true
-
+    let cancelled = false
+    setReady(false)
+    const boot = async (): Promise<void> => {
+      await pullShellUIStateFromBackend()
+      if (cancelled) return
+      ensureDefaultTab()
+      // 不在 boot 里 push：避免独立窗空状态覆盖主窗刚写入的快照
+      if (!cancelled) setReady(true)
+    }
+    void boot()
     return () => {
-      // 标记组件已卸载
-      isMountedRef.current = false
-
-      // 清理事件监听器
-      cleanupEventListeners()
-
-      // 停止 shell 进程
-      if (isShellRunningRef.current) {
-        window.hdc.stopShell(shellIdRef.current).catch((err) => {
-          console.error('[HdcShell] Error stopping shell on unmount:', err)
-        })
-        isShellRunningRef.current = false
-      }
+      cancelled = true
     }
-  }, [cleanupEventListeners])
+  }, [ensureDefaultTab])
 
-  /**
-   * 执行快捷命令
-   * 模拟键盘输入，直接将命令写入 shell，就像用户手动输入一样
-   */
-  const executeCommand = useCallback((command: string) => {
-    if (!isShellRunningRef.current) {
-      return
-    }
+  // tabs / 激活态变更时同步到后端（空 snapshots 不会覆盖后端已有内容）
+  useEffect(() => {
+    if (!ready) return
+    void pushShellUIStateToBackend()
+  }, [ready, tabs, activeTabId])
 
-    captureEvent('shell quick command executed', { command })
+  const { getAllCommands, removeCommand } = useCommandStore()
+  const allCommands = useMemo(() => getAllCommands(), [getAllCommands])
+  const builtInCommands = useMemo(
+    () => allCommands.filter((cmd) => cmd.id.startsWith('builtin-')),
+    [allCommands]
+  )
+  const customCommands = useMemo(
+    () => allCommands.filter((cmd) => cmd.id.startsWith('custom-')),
+    [allCommands]
+  )
 
-    // 直接通过 IPC 写入到 shell，模拟键盘输入
-    // 这样 shell 会正确处理命令，就像用户手动输入一样
-    // 命令会显示在终端中，光标在命令末尾，用户可以直接按回车执行
-    window.hdc.writeToShell(shellIdRef.current, command).catch((err) => {
-      console.error('[HdcShell] Failed to write command to shell:', err)
-    })
-  }, [])
+  const handleAddTab = useCallback(() => {
+    addTab()
+    captureEvent('shell tab created')
+  }, [addTab])
 
-  /**
-   * 处理添加快捷命令
-   */
+  const handleCloseTab = useCallback(
+    (tabId: string, e?: React.MouseEvent) => {
+      e?.stopPropagation()
+      if (tabs.length <= 1) return
+      void window.hdc.stopShell(tabId).catch(() => undefined)
+      closeTabInStore(tabId)
+      setRestartTokens((prev) => {
+        const copy = { ...prev }
+        delete copy[tabId]
+        return copy
+      })
+      captureEvent('shell tab closed')
+    },
+    [tabs.length, closeTabInStore]
+  )
+
+  const restartActiveShell = useCallback(() => {
+    if (!activeTabId) return
+    captureEvent('shell restarted')
+    setRestartTokens((prev) => ({
+      ...prev,
+      [activeTabId]: (prev[activeTabId] || 0) + 1
+    }))
+  }, [activeTabId])
+
+  const executeCommand = useCallback(
+    (command: string) => {
+      if (!activeTabId) return
+      captureEvent('shell quick command executed', { command })
+      void window.hdc.writeToShell(activeTabId, command)
+    },
+    [activeTabId]
+  )
+
   const handleAddCommand = useCallback((name: string, command: string) => {
     captureEvent('shortcut command added', { name })
     useCommandStore.getState().addCommand(name, command)
   }, [])
 
-  /**
-   * 处理删除快捷命令
-   */
-  const handleRemoveCommand = useCallback((id: string, e: React.MouseEvent) => {
-    e.stopPropagation() // 阻止事件冒泡，避免触发命令执行
-    captureEvent('shortcut command deleted')
-    removeCommand(id)
-  }, [removeCommand])
-
-  // 未连接设备时的提示（这个页面不需要设备，但保留原有逻辑）
-  // 注意：根据需求，这是一个本地终端，不需要设备连接
+  const handleRemoveCommand = useCallback(
+    (id: string, e: React.MouseEvent) => {
+      e.stopPropagation()
+      captureEvent('shortcut command deleted')
+      removeCommand(id)
+    },
+    [removeCommand]
+  )
 
   return (
     <div className="p-6 h-full flex flex-col">
-      {/* 标题栏 */}
       <div className="mb-4 flex items-center justify-between flex-shrink-0">
         <h1 className="text-2xl font-bold flex items-center gap-3">
           <TerminalIcon className="h-6 w-6 text-primary" />
           终端命令
           <WindowToggleButton />
-            <HelpToggleButton />
+          <HelpToggleButton />
         </h1>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-2" onClick={restartShell}>
+          <Button variant="outline" size="sm" className="gap-2" onClick={handleAddTab}>
+            <Plus className="h-4 w-4" />
+            新建终端
+          </Button>
+          <Button variant="outline" size="sm" className="gap-2" onClick={restartActiveShell}>
             <RefreshCw className="h-4 w-4" />
             重启终端
           </Button>
@@ -400,10 +591,11 @@ export function HdcShellPage(): React.JSX.Element {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-80 max-h-[600px] overflow-y-auto">
-              {/* 内置命令 */}
               {builtInCommands.length > 0 && (
                 <>
-                  <DropdownMenuLabel className="text-xs text-muted-foreground">内置命令</DropdownMenuLabel>
+                  <DropdownMenuLabel className="text-xs text-muted-foreground">
+                    内置命令
+                  </DropdownMenuLabel>
                   {builtInCommands.map((cmd) => (
                     <DropdownMenuItem
                       key={cmd.id}
@@ -411,17 +603,20 @@ export function HdcShellPage(): React.JSX.Element {
                       onClick={() => executeCommand(cmd.command)}
                     >
                       <div className="font-medium w-full">{cmd.name}</div>
-                      <div className="text-xs text-muted-foreground font-mono break-all">{cmd.command}</div>
+                      <div className="text-xs text-muted-foreground font-mono break-all">
+                        {cmd.command}
+                      </div>
                     </DropdownMenuItem>
                   ))}
                 </>
               )}
 
-              {/* 自定义命令 */}
               {customCommands.length > 0 && (
                 <>
                   <DropdownMenuSeparator />
-                  <DropdownMenuLabel className="text-xs text-muted-foreground">自定义命令</DropdownMenuLabel>
+                  <DropdownMenuLabel className="text-xs text-muted-foreground">
+                    自定义命令
+                  </DropdownMenuLabel>
                   {customCommands.map((cmd) => (
                     <DropdownMenuItem
                       key={cmd.id}
@@ -439,7 +634,9 @@ export function HdcShellPage(): React.JSX.Element {
                           <Trash2 className="h-3 w-3" />
                         </Button>
                       </div>
-                      <div className="text-xs text-muted-foreground font-mono break-all">{cmd.command}</div>
+                      <div className="text-xs text-muted-foreground font-mono break-all">
+                        {cmd.command}
+                      </div>
                     </DropdownMenuItem>
                   ))}
                 </>
@@ -455,16 +652,63 @@ export function HdcShellPage(): React.JSX.Element {
         </div>
       </div>
 
-      {/* 终端区域 */}
       <Card className="flex-1 min-h-0 overflow-hidden flex flex-col">
-        <div
-          ref={terminalRef}
-          className="flex-1 w-full h-full p-2"
-          style={{ minHeight: 0, minWidth: 0 }}
-        />
+        <div className="flex items-center gap-1 border-b px-2 pt-2 pb-0 overflow-x-auto flex-shrink-0">
+          {tabs.map((tab) => {
+            const isActive = tab.id === activeTabId
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTabId(tab.id)}
+                className={cn(
+                  'group inline-flex items-center gap-1.5 rounded-t-md border border-b-0 px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors',
+                  isActive
+                    ? 'bg-primary/15 text-primary border-primary/40 shadow-[inset_0_-2px_0_0_hsl(var(--primary))]'
+                    : 'bg-muted/30 text-muted-foreground border-transparent hover:bg-muted/60 hover:text-foreground'
+                )}
+              >
+                <TerminalIcon className={cn('h-3 w-3', isActive && 'text-primary')} />
+                <span>{tab.title}</span>
+                {tabs.length > 1 && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="ml-0.5 rounded p-0.5 opacity-60 hover:opacity-100 hover:bg-accent"
+                    onClick={(e) => handleCloseTab(tab.id, e)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') handleCloseTab(tab.id)
+                    }}
+                  >
+                    <X className="h-3 w-3" />
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="relative flex-1 min-h-0">
+          {ready &&
+            tabs.map((tab) => (
+              <div
+                key={tab.id}
+                className={cn(
+                  'absolute inset-0',
+                  tab.id === activeTabId ? 'visible' : 'invisible pointer-events-none'
+                )}
+              >
+                <ShellSessionPane
+                  shellId={tab.id}
+                  active={tab.id === activeTabId}
+                  pageVisible={visible}
+                  restartToken={restartTokens[tab.id] || 0}
+                />
+              </div>
+            ))}
+        </div>
       </Card>
 
-      {/* 添加快捷命令对话框 */}
       <AddCommandDialog
         open={isAddDialogOpen}
         onOpenChange={setIsAddDialogOpen}

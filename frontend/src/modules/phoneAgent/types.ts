@@ -5,7 +5,9 @@
 /**
  * LLM服务提供商
  */
-export type LLMProvider = 'zhipu' | 'openai'
+export type LLMProvider = 'zhipu' | 'openai' | 'deepseek' | 'openrouter' | 'custom'
+
+export type LLMEffort = 'low' | 'medium' | 'high' | 'extra-high'
 
 /**
  * LLM配置
@@ -18,6 +20,7 @@ export interface LLMConfig {
   maxTokens: number
   temperature?: number
   topP?: number
+  effort?: LLMEffort
 }
 
 /**

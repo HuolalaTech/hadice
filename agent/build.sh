@@ -7,12 +7,33 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD_DIR="${SCRIPT_DIR}/build"
-ANDROID_NDK="${ANDROID_NDK_HOME:-${ANDROID_HOME}/ndk/25.2.9519653}"
 
-if [ ! -d "$ANDROID_NDK" ]; then
+# Resolve NDK: ANDROID_NDK_HOME > ANDROID_HOME/ndk/<newest> > ~/Library/Android/sdk/ndk/<newest>
+resolve_ndk() {
+	if [ -n "${ANDROID_NDK_HOME:-}" ] && [ -d "$ANDROID_NDK_HOME" ]; then
+		echo "$ANDROID_NDK_HOME"
+		return
+	fi
+	local sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}}"
+	local ndk_root="$sdk/ndk"
+	if [ ! -d "$ndk_root" ]; then
+		return 1
+	fi
+	# ponytail: version dirs sort lexicographically; NDK versions are numeric so newest wins
+	local newest
+	newest=$(ls -1 "$ndk_root" 2>/dev/null | sort -V | tail -1)
+	if [ -n "$newest" ] && [ -d "$ndk_root/$newest" ]; then
+		echo "$ndk_root/$newest"
+		return
+	fi
+	return 1
+}
+
+ANDROID_NDK="$(resolve_ndk || true)"
+
+if [ -z "$ANDROID_NDK" ] || [ ! -d "$ANDROID_NDK" ]; then
 	echo "Error: Android NDK not found."
-	echo "Please set ANDROID_NDK_HOME or ANDROID_HOME environment variable."
-	echo "Expected path: $ANDROID_NDK"
+	echo "Set ANDROID_NDK_HOME, or install an NDK under \$ANDROID_HOME/ndk/ (or ~/Library/Android/sdk/ndk/)."
 	exit 1
 fi
 

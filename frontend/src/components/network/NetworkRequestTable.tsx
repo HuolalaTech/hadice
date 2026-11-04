@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useMemo, useCallback, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { Eraser, X, Clock } from 'lucide-react'
+import { Eraser, X, Clock, Star, PanelLeftClose, ListFilter, Globe } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
 import {
@@ -11,10 +11,13 @@ import {
   ContextMenuTrigger
 } from '@/components/ui/context-menu'
 import { getNetworkRequestKey } from '@/lib/network-request-key'
-import { buildNetworkRequestUrl } from '@/lib/network-url'
+import { buildNetworkRequestUrl, decodeNetworkUrlForDisplay, stripUrlForFavorite } from '@/lib/network-url'
+import { openWebPeek } from '@/lib/open-web-peek'
 import { copyTextToClipboard } from '@/lib/clipboard'
+import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useThemeStore } from '@/store/themeStore'
+import { useNetworkFavoriteStore } from '@/store/networkFavoriteStore'
 import type { NetworkRequest } from '@/types/hdc'
 
 // ======================================================================
@@ -50,12 +53,14 @@ interface NetworkRequestTableProps {
   onToggleSelect?: (request: NetworkRequest) => void
   /** 全选/取消全选当前可见的请求 */
   onToggleSelectAll?: () => void
-  /** 右键菜单：导出一组请求 */
-  onExportRequests?: (requests: NetworkRequest[]) => void
-  /** 右键菜单：删除一组请求 */
-  onDeleteRequests?: (requests: NetworkRequest[]) => void
+  /** 右键菜单：导出单条请求 */
+  onExportRequest?: (request: NetworkRequest) => void
+  /** 右键菜单：删除单条请求 */
+  onDeleteRequest?: (request: NetworkRequest) => void
   /** 右键菜单：基于单条请求生成 mock */
   onMockRequest?: (request: NetworkRequest) => void
+  /** 折叠左侧列表面板（Task 5/6 接按钮） */
+  onCollapsePanel?: () => void
 }
 
 // ======================================================================
@@ -258,7 +263,7 @@ function RollingUrlCount({ value }: { value: number }): React.JSX.Element | null
 
 function getMethodColor(method: string): string {
   const colors: Record<string, string> = {
-    GET: 'text-blue-500', POST: 'text-green-500', PUT: 'text-yellow-500',
+    GET: 'text-blue-500', POST: 'text-green-700 dark:text-green-400', PUT: 'text-yellow-500',
     DELETE: 'text-red-500', PATCH: 'text-purple-500', HEAD: 'text-gray-500',
     OPTIONS: 'text-gray-500'
   }
@@ -267,7 +272,7 @@ function getMethodColor(method: string): string {
 
 function getStatusCodeColor(statusCode?: number): string {
   if (!statusCode) return 'text-muted-foreground'
-  if (statusCode >= 200 && statusCode < 300) return 'text-green-500 border-green-500'
+  if (statusCode >= 200 && statusCode < 300) return 'text-green-700 border-green-700 dark:text-green-400 dark:border-green-400'
   if (statusCode >= 300 && statusCode < 400) return 'text-yellow-500 border-yellow-500'
   if (statusCode >= 400) return 'text-red-500 border-red-500'
   return 'text-muted-foreground border-muted-foreground'
@@ -378,7 +383,7 @@ function buildRowData(
     method: item.method,
     methodColor: getMethodColor(item.method),
     url: item.url || '-',
-    fullUrl: buildNetworkRequestUrl(item),
+    fullUrl: decodeNetworkUrlForDisplay(buildNetworkRequestUrl(item)),
   }
 }
 
@@ -427,9 +432,11 @@ interface RowProps {
   isRegexMode: boolean
   /** 列表 URL 展示提取正则列表（不影响右侧详情原始数据） */
   urlExtractPatterns: string[]
+  /** 是否已收藏（父组件按 favorites 计算，避免 memo 挡住星标更新） */
+  isFavorite: boolean
   onSelect: (req: NetworkRequest) => void
   onToggleCheck: ((req: NetworkRequest) => void) | undefined
-  selectedRequestCount: number
+  onToggleFavorite: (req: NetworkRequest) => void
   onExportRequest: ((req: NetworkRequest) => void) | undefined
   onDeleteRequest: ((req: NetworkRequest) => void) | undefined
   onMockRequest: ((req: NetworkRequest) => void) | undefined
@@ -437,7 +444,8 @@ interface RowProps {
 
 const MemoizedRow = React.memo(function MemoizedRow({
   rowData, rowHeight, showExportCheckboxes, searchQuery, isRegexMode, urlExtractPatterns,
-  onSelect, onToggleCheck, selectedRequestCount, onExportRequest, onDeleteRequest, onMockRequest,
+  isFavorite: fav, onSelect, onToggleCheck, onToggleFavorite,
+  onExportRequest, onDeleteRequest, onMockRequest,
 }: RowProps): React.JSX.Element {
   if (rowData.type === 'boundary') {
     return (
@@ -458,7 +466,8 @@ const MemoizedRow = React.memo(function MemoizedRow({
   const extractResult = extractUrlDisplayLabel(fullUrl, urlExtractPatterns)
   const displayUrl = extractResult.label
   const extractedOk = extractResult.extracted
-  const hasContextActions = !!(onExportRequest || onDeleteRequest || onMockRequest || extractedOk)
+  // 至少有收藏，右键菜单始终可用
+  const hasOtherActions = !!(onExportRequest || onDeleteRequest || onMockRequest || extractedOk)
 
   // mock 行：左侧色条 + 淡底 + URL 着色，和普通请求一眼可分
   const rowTone = rowData.isMock
@@ -469,9 +478,29 @@ const MemoizedRow = React.memo(function MemoizedRow({
       ? 'bg-primary/10'
       : 'hover:bg-secondary/30'
 
+  const favoriteStarButton = (
+    <button
+      type="button"
+      className={cn(
+        'shrink-0 mt-0.5 p-0.5 transition-opacity hover:text-amber-500',
+        // 已收藏常显；未收藏仅行悬停显示
+        fav ? 'text-amber-500 opacity-100' : 'text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
+      )}
+      title={fav ? '取消收藏' : '收藏（保留到第一个 & 前）'}
+      aria-label={fav ? '取消收藏' : '收藏'}
+      onClick={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        onToggleFavorite(rowData.request)
+      }}
+    >
+      <Star className={cn('h-3.5 w-3.5', fav && 'fill-amber-500 text-amber-500')} />
+    </button>
+  )
+
   const rowContent = (
     <div
-      className={`grid ${showExportCheckboxes ? 'grid-cols-[28px_1fr]' : 'grid-cols-[48px_1fr]'} gap-3 px-3 py-1 cursor-pointer select-none items-center border-b border-border/30 ${rowTone}`}
+      className={`group grid ${showExportCheckboxes ? 'grid-cols-[28px_1fr]' : 'grid-cols-[48px_1fr]'} gap-3 px-3 py-1 cursor-pointer select-none items-center border-b border-border/30 ${rowTone}`}
       style={{ height: rowHeight }}
       onClick={() => onSelect(rowData.request)}
       onContextMenu={() => onSelect(rowData.request)}
@@ -499,6 +528,7 @@ const MemoizedRow = React.memo(function MemoizedRow({
                 mock
               </span>
             )}
+            {favoriteStarButton}
           </div>
           <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
             {rowData.hasMatch && <span className="w-1.5 h-1.5 bg-red-500 rounded-full flex-shrink-0" />}
@@ -540,6 +570,7 @@ const MemoizedRow = React.memo(function MemoizedRow({
                   mock
                 </span>
               )}
+              {favoriteStarButton}
             </div>
             <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
               <span className="text-[10px] text-muted-foreground">{rowData.formattedTimestamp}</span>
@@ -563,10 +594,6 @@ const MemoizedRow = React.memo(function MemoizedRow({
     </div>
   )
 
-  if (!hasContextActions) {
-    return rowContent
-  }
-
   const handleCopyExtracted = () => {
     void copyTextToClipboard(displayUrl).then((ok) => {
       if (ok) toast.success(`已复制接口: ${displayUrl}`)
@@ -578,6 +605,15 @@ const MemoizedRow = React.memo(function MemoizedRow({
     <ContextMenu>
       <ContextMenuTrigger asChild>{rowContent}</ContextMenuTrigger>
       <ContextMenuContent className="w-40">
+        <ContextMenuItem onSelect={() => onToggleFavorite(rowData.request)}>
+          <Star className={cn('mr-2 h-3.5 w-3.5', fav && 'fill-amber-500 text-amber-500')} />
+          {fav ? '取消收藏' : '收藏'}
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => void openWebPeek(fullUrl)}>
+          <Globe className="mr-2 h-3.5 w-3.5" />
+          网页看看
+        </ContextMenuItem>
+        {hasOtherActions && <ContextMenuSeparator />}
         {extractedOk && (
           <ContextMenuItem onSelect={handleCopyExtracted}>
             复制接口
@@ -588,16 +624,15 @@ const MemoizedRow = React.memo(function MemoizedRow({
         )}
         {onExportRequest && (
           <ContextMenuItem onSelect={() => onExportRequest(rowData.request)}>
-            {selectedRequestCount > 1 ? `导出${selectedRequestCount}个请求` : '导出此请求'}
+            导出此请求
           </ContextMenuItem>
         )}
         {onDeleteRequest && (
           <ContextMenuItem onSelect={() => onDeleteRequest(rowData.request)}>
-            {selectedRequestCount > 1 ? `删除${selectedRequestCount}个请求` : '删除此请求'}
+            删除此请求
           </ContextMenuItem>
         )}
         {(onExportRequest || onDeleteRequest) && onMockRequest && <ContextMenuSeparator />}
-        {/* Mock always targets the row that opened this menu, independent of checkbox selection. */}
         {onMockRequest && (
           <ContextMenuItem onSelect={() => onMockRequest(rowData.request)}>
             mock此请求
@@ -612,6 +647,7 @@ const MemoizedRow = React.memo(function MemoizedRow({
   if (prev.showExportCheckboxes !== next.showExportCheckboxes) return false
   if (prev.searchQuery !== next.searchQuery) return false
   if (prev.isRegexMode !== next.isRegexMode) return false
+  if (prev.isFavorite !== next.isFavorite) return false
   if (prev.urlExtractPatterns !== next.urlExtractPatterns
     && prev.urlExtractPatterns.join('\0') !== next.urlExtractPatterns.join('\0')) {
     return false
@@ -619,7 +655,7 @@ const MemoizedRow = React.memo(function MemoizedRow({
   if (prev.onExportRequest !== next.onExportRequest) return false
   if (prev.onDeleteRequest !== next.onDeleteRequest) return false
   if (prev.onMockRequest !== next.onMockRequest) return false
-  if (prev.selectedRequestCount !== next.selectedRequestCount) return false
+  if (prev.onToggleFavorite !== next.onToggleFavorite) return false
 
   // Compare only the fields that affect visual output
   const a = prev.rowData
@@ -656,13 +692,19 @@ export function NetworkRequestTable({
   autoScrollEnabled, setAutoScrollEnabled, onClearAll,
   showExportCheckboxes = false, selectedIds,
   onToggleSelect, onToggleSelectAll,
-  onExportRequests, onDeleteRequests, onMockRequest
+  onExportRequest, onDeleteRequest, onMockRequest,
+  onCollapsePanel,
 }: NetworkRequestTableProps): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null)
   const prevCountRef = useRef(0)
   const urlExtractContainerRef = useRef<HTMLDivElement>(null)
   const urlExtractDraftRef = useRef<HTMLInputElement>(null)
   const theme = useThemeStore((s) => s.theme)
+  const favorites = useNetworkFavoriteStore(s => s.favorites)
+  const favoritesFilterOn = useNetworkFavoriteStore(s => s.favoritesFilterOn)
+  const setFavoritesFilterOn = useNetworkFavoriteStore(s => s.setFavoritesFilterOn)
+  const toggleFavorite = useNetworkFavoriteStore(s => s.toggleFavorite)
+  const isFavorite = useNetworkFavoriteStore(s => s.isFavorite)
   const [urlExtractPatterns, setUrlExtractPatterns] = useState(loadUrlExtractPatterns)
   const [urlExtractDraft, setUrlExtractDraft] = useState('')
   // 启动时把已激活正则并入历史，避免「有标签却无下拉缓存」
@@ -746,9 +788,17 @@ export function NetworkRequestTable({
   }, [showUrlExtractHistory])
 
   // ---- Memoize sorted + filtered items -----------------------------------
+  // 过滤顺序：先收藏 → 再 search
   const allItems = useMemo(() => {
-    const boundaryMarkers = requests.filter(r => r.isSessionBoundary)
-    const normalRequests = requests.filter(r => !r.isSessionBoundary)
+    const favoriteFiltered = favoritesFilterOn
+      ? requests.filter((r) => {
+          const key = stripUrlForFavorite(r)
+          return key !== '' && favorites.includes(key)
+        })
+      : requests
+
+    const boundaryMarkers = favoriteFiltered.filter(r => r.isSessionBoundary)
+    const normalRequests = favoriteFiltered.filter(r => !r.isSessionBoundary)
 
     const effectiveFiltered = (isFilterMode && searchQuery.trim())
       ? normalRequests.filter(r => {
@@ -758,7 +808,7 @@ export function NetworkRequestTable({
       : normalRequests
 
     return [...boundaryMarkers, ...effectiveFiltered].sort((a, b) => a.timestamp - b.timestamp)
-  }, [requests, isFilterMode, searchQuery, searchMatches])
+  }, [requests, favoritesFilterOn, favorites, isFilterMode, searchQuery, searchMatches])
 
   // ---- Pre-compute row data (all render fields) ---------------------------
   const selKey = selectedRequest ? getRequestKey(selectedRequest) : null
@@ -767,17 +817,6 @@ export function NetworkRequestTable({
     allItems.map(item => buildRowData(item, selKey, selectedIds, searchMatches)),
     [allItems, selKey, selectedIds, searchMatches]
   )
-
-  const selectedRequests = useMemo(
-    () => requests.filter(request => !request.isSessionBoundary && selectedIds?.has(getRequestKey(request))),
-    [requests, selectedIds]
-  )
-  const handleExportRequest = useCallback((request: NetworkRequest) => {
-    onExportRequests?.(selectedRequests.length > 1 ? selectedRequests : [request])
-  }, [onExportRequests, selectedRequests])
-  const handleDeleteRequest = useCallback((request: NetworkRequest) => {
-    onDeleteRequests?.(selectedRequests.length > 1 ? selectedRequests : [request])
-  }, [onDeleteRequests, selectedRequests])
 
   // ---- Virtualizer -------------------------------------------------------
   const rowVirtualizer = useVirtualizer({
@@ -946,6 +985,17 @@ export function NetworkRequestTable({
 
   const headerActions = (
     <div className="flex items-center gap-2 shrink-0 ml-auto">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className={cn('h-6 w-6', favoritesFilterOn && 'text-amber-500')}
+        title="仅显示收藏（筛选，不会添加收藏）"
+        aria-label="仅显示收藏"
+        onClick={() => setFavoritesFilterOn(!favoritesFilterOn)}
+      >
+        <ListFilter className={cn('h-3.5 w-3.5', favoritesFilterOn && 'text-amber-500')} />
+      </Button>
       {onClearAll && (
         <Button
           type="button"
@@ -964,8 +1014,28 @@ export function NetworkRequestTable({
         <Checkbox id="auto-scroll" checked={autoScrollEnabled} onCheckedChange={(c) => setAutoScrollEnabled(c === true)} className="h-4 w-4" />
         <label htmlFor="auto-scroll" className="text-xs text-muted-foreground cursor-pointer select-none whitespace-nowrap">自动滚动</label>
       </div>
+      {onCollapsePanel && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6"
+          title="折叠列表"
+          aria-label="折叠列表"
+          onClick={onCollapsePanel}
+        >
+          <PanelLeftClose className="h-3.5 w-3.5" />
+        </Button>
+      )}
     </div>
   )
+
+  const emptyTitle = favoritesFilterOn
+    ? (favorites.length === 0 ? '没有收藏的请求' : '当前列表无匹配收藏')
+    : (isFilterMode && searchQuery.trim() ? '没有匹配的请求' : '暂无网络请求')
+  const emptySubtitle = favoritesFilterOn
+    ? (favorites.length === 0 ? '在请求行点击星标即可收藏' : '请尝试关闭「仅显示收藏」或调整搜索')
+    : (isFilterMode && searchQuery.trim() ? '请尝试其他搜索关键词' : '开始抓包后将显示网络请求列表')
 
   // ---- Render ------------------------------------------------------------
   return (
@@ -1005,8 +1075,8 @@ export function NetworkRequestTable({
       {allItems.length === 0 ? (
         <div className="flex flex-1 items-center justify-center text-muted-foreground">
           <div className="text-center">
-            <p className="text-sm">{isFilterMode && searchQuery.trim() ? '没有匹配的请求' : '暂无网络请求'}</p>
-            <p className="text-xs mt-1">{isFilterMode && searchQuery.trim() ? '请尝试其他搜索关键词' : '开始抓包后将显示网络请求列表'}</p>
+            <p className="text-sm">{emptyTitle}</p>
+            <p className="text-xs mt-1">{emptySubtitle}</p>
           </div>
         </div>
       ) : (
@@ -1044,11 +1114,12 @@ export function NetworkRequestTable({
                     searchQuery={searchQuery}
                     isRegexMode={isRegexMode}
                     urlExtractPatterns={urlExtractPatterns}
+                    isFavorite={rowData.type === 'request' ? isFavorite(rowData.request) : false}
                     onSelect={handleSelect}
                     onToggleCheck={onToggleSelect}
-                    selectedRequestCount={selectedRequests.length}
-                    onExportRequest={onExportRequests ? handleExportRequest : undefined}
-                    onDeleteRequest={onDeleteRequests ? handleDeleteRequest : undefined}
+                    onToggleFavorite={toggleFavorite}
+                    onExportRequest={onExportRequest}
+                    onDeleteRequest={onDeleteRequest}
                     onMockRequest={onMockRequest}
                   />
                 </div>

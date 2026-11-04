@@ -7,7 +7,8 @@ import {
   Database,
   Sparkles,
   Info,
-  Trash2
+  Trash2,
+  Download
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -47,7 +48,7 @@ export function AppListTable({
   onImageError: (packageName: string) => void
   onStartApp: (app: AppInfo) => Promise<void>
   onStopApp: (app: AppInfo) => Promise<void>
-  onActionClick: (app: AppInfo, action: 'clear' | 'clearCache' | 'uninstall' | 'detail', event?: React.MouseEvent) => void
+  onActionClick: (app: AppInfo, action: 'clear' | 'clearCache' | 'uninstall' | 'detail' | 'export', event?: React.MouseEvent) => void
 }): React.JSX.Element {
   // 过滤应用（先应用筛选条件，再应用搜索）
   const filteredApps = React.useMemo(() => {
@@ -174,8 +175,8 @@ export function AppListTable({
                 {app.appName}
               </span>
               {app.isRunning && (
-                <span className="text-xs text-green-500 flex items-center gap-1 mt-0.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                <span className="text-xs text-green-700 dark:text-green-400 flex items-center gap-1 mt-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-600 dark:bg-green-500" />
                   运行中
                 </span>
               )}
@@ -239,6 +240,15 @@ export function AppListTable({
                     >
                       <Info className="h-4 w-4 mr-2" />
                       查看详情
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onActionClick(app, 'export', e)
+                      }}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      导出应用
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     {!app.isSystemApp && (

@@ -12,6 +12,13 @@ import type {
   MissionInfo,
   AppRunningRecord
 } from '@/types/hdc'
+import type {
+  InstallAttemptResult,
+  InstallHistoryItem,
+  InstallPlatform,
+  InstallSourceType,
+  PreparedInstallPackage
+} from '@/types/install'
 
 /**
  * 应用管理相关 API
@@ -302,6 +309,28 @@ export const appAPI = {
     }
   },
 
+  exportApp: async (
+    connectKey: string,
+    packageName: string,
+    platform?: string
+  ): Promise<{ success: boolean; cancelled?: boolean; filePath?: string; error?: string }> => {
+    try {
+      const result = await App.ExportAppByPlatform(connectKey, packageName, platform || 'harmonyos')
+      return {
+        success: Boolean(result?.success),
+        cancelled: Boolean(result?.cancelled),
+        filePath: result?.filePath as string | undefined,
+        error: result?.error as string | undefined
+      }
+    } catch (error) {
+      console.error('[HDC API] exportApp failed:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '导出失败'
+      }
+    }
+  },
+
   installApp: async (connectKey: string, filePath: string): Promise<HdcResult> => {
     try {
       const result = await App.InstallApp(connectKey, filePath, false, false)
@@ -314,6 +343,113 @@ export const appAPI = {
       console.error('[HDC API] installApp failed:', error)
       throw error
     }
+  },
+
+  downloadInstallPackage: async (
+    url: string,
+    platform: InstallPlatform
+  ): Promise<PreparedInstallPackage> => {
+    const result = await App.DownloadInstallPackage(url, platform)
+    if (!result?.info) {
+      throw new Error('下载后的安装包信息为空')
+    }
+
+    return {
+      filePath: result.filePath,
+      info: {
+        filePath: result.info.filePath,
+        fileSize: result.info.fileSize,
+        appName: result.info.appName,
+        icon: result.info.icon,
+        bundleName: result.info.bundleName,
+        versionName: result.info.versionName,
+        versionCode: result.info.versionCode,
+        minAPIVersion: result.info.minAPIVersion,
+        targetAPIVersion: result.info.targetAPIVersion,
+        permissions: result.info.permissions ?? [],
+        extractedHapPath: result.info.extractedHapPath,
+        layeredIcon: result.info.layeredIcon,
+        vendor: result.info.vendor,
+        moduleName: result.info.moduleName,
+        moduleDescription: result.info.moduleDescription,
+        compileSdkVersion: result.info.compileSdkVersion,
+        compileMode: result.info.compileMode,
+        virtualMachine: result.info.virtualMachine,
+        deviceTypes: result.info.deviceTypes,
+        abilities: result.info.abilities,
+        nativeCode: result.info.nativeCode
+      }
+    }
+  },
+
+  installAppWithHistory: async (
+    connectKey: string,
+    filePath: string,
+    sourceType: InstallSourceType,
+    source: string
+  ): Promise<InstallAttemptResult> => {
+    const result = await App.InstallAppWithHistory(connectKey, filePath, sourceType, source)
+    if (!result) {
+      throw new Error('安装结果为空')
+    }
+
+    return {
+      success: result.success,
+      output: result.output,
+      error: result.error,
+      historyWarning: result.historyWarning,
+      cachedPath: result.cachedPath
+    }
+  },
+
+  getInstallHistory: async (platform: InstallPlatform): Promise<InstallHistoryItem[]> => {
+    const history = await App.GetInstallHistory(platform)
+    return (history ?? []).map((item) => ({
+      id: item.id,
+      platform: item.platform as InstallPlatform,
+      sourceType: item.sourceType as InstallSourceType,
+      source: item.source,
+      fileName: item.fileName,
+      fileSize: item.fileSize,
+      cachedPath: item.cachedPath,
+      sha256: item.sha256,
+      appName: item.appName,
+      packageName: item.packageName,
+      versionName: item.versionName,
+      versionCode: item.versionCode,
+      installedAt: item.installedAt,
+      success: item.success,
+      error: item.error
+    }))
+  },
+
+  reinstallAppFromHistory: async (
+    connectKey: string,
+    historyId: string
+  ): Promise<InstallAttemptResult> => {
+    const result = await App.ReinstallAppFromHistory(connectKey, historyId)
+    if (!result) {
+      throw new Error('重装结果为空')
+    }
+
+    return {
+      success: result.success,
+      output: result.output,
+      error: result.error,
+      historyWarning: result.historyWarning,
+      cachedPath: result.cachedPath
+    }
+  },
+
+  deleteInstallHistory: async (
+    platform: InstallPlatform,
+    historyId: string
+  ): Promise<void> => {
+    await App.DeleteInstallHistory(platform, historyId)
+  },
+
+  clearInstallHistory: async (platform: InstallPlatform): Promise<void> => {
+    await App.ClearInstallHistory(platform)
   },
 
   parseHapAppInfo: async (filePath: string): Promise<{ success: boolean; error?: string; info?: any }> => {

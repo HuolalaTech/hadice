@@ -51,7 +51,7 @@ export function AppManagerPage(): React.JSX.Element {
 
   // 使用自定义 hooks
   const { apps, stats, isLoading, failedIcons, fetchAppList, handleImageError } = useAppList(filter)
-  const { isActioning, startApp, stopApp, executeAction } = useAppActions(async () => {
+  const { isActioning, startApp, stopApp, executeAction, exportApp } = useAppActions(async () => {
     await fetchAppList()
   })
 
@@ -169,15 +169,33 @@ export function AppManagerPage(): React.JSX.Element {
   // 处理应用操作（从表格菜单）
   const handleAppAction = useCallback(async (
     app: AppInfo,
-    action: 'clear' | 'clearCache' | 'uninstall' | 'detail',
+    action: 'clear' | 'clearCache' | 'uninstall' | 'detail' | 'export',
     event?: React.MouseEvent
   ) => {
     if (action === 'detail') {
       handleOpenDetailDialog(app)
       return
     }
+    if (action === 'export') {
+      const toastId = toast.loading(`正在导出 ${app.appName || app.packageName}...`)
+      try {
+        const result = await exportApp(app)
+        if (result.cancelled) {
+          toast.dismiss(toastId)
+          return
+        }
+        if (result.success) {
+          toast.success(`导出成功: ${result.filePath || ''}`, { id: toastId })
+        } else {
+          toast.error(result.error || '导出失败', { id: toastId })
+        }
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : '导出失败', { id: toastId })
+      }
+      return
+    }
     handleOpenActionDialog(app, action, event)
-  }, [handleOpenDetailDialog, handleOpenActionDialog])
+  }, [handleOpenDetailDialog, handleOpenActionDialog, exportApp])
 
   // 未连接设备
   if (!selectedDevice) {

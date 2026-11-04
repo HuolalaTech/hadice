@@ -10,7 +10,17 @@ import { EventsOn } from '../wailsjs/runtime/runtime'
 import { UPDATE_CHECK_URL } from '@/lib/config'
 import { PageProvider } from '@/contexts/PageContext'
 import { usePanelStore } from '@/store/panelStore'
-import { useDeviceStore } from '@/store/deviceStore'
+import { useShellSessionStore } from '@/store/shellSessionStore'
+import {
+  SHELL_HANDOFF_EVENT,
+  setShellHandoff,
+  type ShellHandoffPayload
+} from '@/lib/shell-handoff'
+import {
+  DEVICE_SELECTED_EVENT,
+  useDeviceStore
+} from '@/store/deviceStore'
+import { readPreferredDeviceKeyFromSearch } from '@/lib/device-selection'
 import { captureEvent } from '@/lib/posthog'
 import { useThemeStore } from '@/store/themeStore'
 import {
@@ -21,12 +31,17 @@ import {
   ScreenMirrorScreenshotPage,
   FileTransferPage,
   AppManagerPage,
+  AppLayoutPage,
   AppInstallPage,
   SystemLogsPage,
   NetworkCapturePage,
+  TrackLogPage,
   AndroidNetworkCapturePage,
   HdcShellPage,
-  AIAutomationPage
+  AIAutomationPage,
+  HandyToolsPage,
+  WebPeekPage,
+  WebPeekViewerPage
 } from '@/pages'
 
 /**
@@ -85,6 +100,9 @@ function renderPage(
     case 'app-manager':
       page = <AppManagerPage />
       break
+    case 'app-layout':
+      page = <AppLayoutPage />
+      break
     case 'app-install':
       page = <AppInstallPage />
       break
@@ -94,6 +112,9 @@ function renderPage(
     case 'network-capture':
       page = <NetworkCapturePage />
       break
+    case 'track-log':
+      page = <TrackLogPage />
+      break
     case 'android-network-capture':
       page = <AndroidNetworkCapturePage />
       break
@@ -102,6 +123,15 @@ function renderPage(
       break
     case 'ai-automation':
       page = <AIAutomationPage />
+      break
+    case 'handy-tools':
+      page = <HandyToolsPage />
+      break
+    case 'web-peek':
+      page = <WebPeekPage />
+      break
+    case 'web-peek-viewer':
+      page = <WebPeekViewerPage />
       break
     default:
       page = <DeviceOverviewPage />
@@ -114,15 +144,20 @@ function renderPage(
 }
 
 /**
- * 解析 URL 中的 page 和 standalone 参数
+ * 解析 URL 中的 page / standalone / device 参数
  */
-function useUrlParams(): { page: string; standalone: boolean } {
-  const [params, setParams] = useState(() => {
+function useUrlParams(): {
+  page: string
+  standalone: boolean
+  deviceKey: string | null
+} {
+  const [params] = useState(() => {
     const search = typeof window !== 'undefined' ? window.location.search : ''
     const sp = new URLSearchParams(search)
     return {
       page: sp.get('page') || 'device-overview',
-      standalone: sp.get('standalone') === '1'
+      standalone: sp.get('standalone') === '1',
+      deviceKey: readPreferredDeviceKeyFromSearch(search)
     }
   })
   return params
@@ -133,10 +168,15 @@ function useUrlParams(): { page: string; standalone: boolean } {
  */
 function App(): React.JSX.Element {
   const { activeMenu, setActiveMenu } = useNavigationStore()
-  const { page, standalone } = useUrlParams()
+  const { page, standalone, deviceKey } = useUrlParams()
   const { panelOpenMap, getFirstVisibleMenuId } = usePanelStore()
   const initializeDevices = useDeviceStore((s) => s.initialize)
+  const setPreferredConnectKey = useDeviceStore((s) => s.setPreferredConnectKey)
+  const applyRemoteDeviceKey = useDeviceStore((s) => s.applyRemoteDeviceKey)
+  const selectedDevice = useDeviceStore((s) => s.selectedDevice)
   const theme = useThemeStore((s) => s.theme)
+  // 终端页 keep-alive：首次进入后常驻，切走不卸载，避免 PTY/历史被清掉
+  const [shellKeptAlive, setShellKeptAlive] = useState(false)
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false)
   const [updateInfo, setUpdateInfo] = useState<{
     currentVersion: string
@@ -146,15 +186,36 @@ function App(): React.JSX.Element {
     releaseNotes: string
   } | null>(null)
 
-  // 主窗口：监听 navigateToPage 事件，切回主窗口时切换到对应页面
+  // Wails WebView 默认不吃浏览器 Cmd+R；开发热更失败时用它强制刷前端
   useEffect(() => {
-    if (!standalone) {
-      const unlisten = EventsOn('navigateToPage', (menuId: string) => {
-        setActiveMenu(menuId)
-      })
-      return () => {
-        if (typeof unlisten === 'function') unlisten()
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'r') return
+      e.preventDefault()
+      window.location.reload()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
+  // 主窗口：独立窗交回终端状态（必须在本窗 JS 里收下，localStorage/二次 Get 不可靠）
+  useEffect(() => {
+    if (standalone) return
+    const unlistenHandoff = EventsOn(
+      SHELL_HANDOFF_EVENT,
+      (payload: ShellHandoffPayload) => {
+        if (!payload?.tabs?.length) return
+        setShellHandoff(payload)
+        useShellSessionStore.getState().applyBackendState(payload)
       }
+    )
+    const unlistenNav = EventsOn('navigateToPage', (menuId: string) => {
+      // 立刻放开主窗挂载，勿等 IsPanelWindowOpen 异步刷新
+      usePanelStore.getState().setPanelOpen(menuId, false)
+      setActiveMenu(menuId)
+    })
+    return () => {
+      if (typeof unlistenHandoff === 'function') unlistenHandoff()
+      if (typeof unlistenNav === 'function') unlistenNav()
     }
   }, [standalone, setActiveMenu])
 
@@ -165,6 +226,25 @@ function App(): React.JSX.Element {
       setActiveMenu(getFirstVisibleMenuId(activeMenu))
     }
   }, [standalone, panelOpenMap, activeMenu, setActiveMenu, getFirstVisibleMenuId])
+
+  // 主窗口：在抓包页切设备时，同步到对应平台的抓包面板
+  useEffect(() => {
+    if (standalone || !selectedDevice) return
+    const isHarmony = selectedDevice.platform === 'harmonyos'
+    if (activeMenu === 'android-network-capture' && isHarmony) {
+      setActiveMenu('network-capture')
+      return
+    }
+    if (activeMenu === 'network-capture' && !isHarmony) {
+      setActiveMenu('android-network-capture')
+    }
+  }, [standalone, selectedDevice?.platform, activeMenu, setActiveMenu])
+
+  useEffect(() => {
+    if (!standalone && activeMenu === 'hdc-shell') {
+      setShellKeptAlive(true)
+    }
+  }, [standalone, activeMenu])
 
   // 检查更新（仅主窗口）
   useEffect(() => {
@@ -236,21 +316,64 @@ function App(): React.JSX.Element {
     }
   }
 
-  // 独立窗口：初始化设备列表（因无 Header 不再自动加载）
+  // 跨窗同步当前设备（主窗切换 / 再次打开独立窗聚焦时广播）
   useEffect(() => {
-    if (standalone) {
-      initializeDevices()
+    const unlisten = EventsOn(DEVICE_SELECTED_EVENT, (key: string) => {
+      if (typeof key === 'string' && key) applyRemoteDeviceKey(key)
+    })
+    return () => {
+      if (typeof unlisten === 'function') unlisten()
     }
-  }, [standalone, initializeDevices])
+  }, [applyRemoteDeviceKey])
+
+  // 独立窗口：URL device → 否则读后端 → 拉列表 → 再强制 apply（防 setDevices 竞态）
+  useEffect(() => {
+    if (!standalone) return
+    let cancelled = false
+    ;(async () => {
+      let preferred = deviceKey
+      if (!preferred) {
+        try {
+          preferred = (await BackendApp.GetSelectedConnectKey()) || null
+        } catch {
+          preferred = null
+        }
+      }
+      if (cancelled) return
+      if (preferred) setPreferredConnectKey(preferred)
+      await initializeDevices()
+      if (cancelled) return
+      if (preferred) applyRemoteDeviceKey(preferred)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [
+    standalone,
+    deviceKey,
+    setPreferredConnectKey,
+    applyRemoteDeviceKey,
+    initializeDevices,
+  ])
 
   // 独立窗口布局：页面自带头部，内容区含切换按钮
   if (standalone) {
+    const isPeekViewer = page === 'web-peek-viewer'
+    // 网页看看悬浮工具条：透明无底栏，避免挡内容
+    if (isPeekViewer) {
+      return (
+        <div className="h-screen w-screen overflow-hidden bg-transparent text-foreground">
+          {renderPage(page, true)}
+          <Toaster position="top-center" theme={theme} />
+        </div>
+      )
+    }
     return (
       <div className="h-screen flex flex-col bg-background text-foreground">
-        <main className="flex-1 overflow-auto bg-background min-h-0">
+        {/* overflow-hidden：系统日志 xterm 需要稳定高度，auto 会导致独立窗终端区塌成空白 */}
+        <main className="flex-1 overflow-hidden bg-background min-h-0">
           {renderPage(page, true)}
         </main>
-        {/* 独立窗口也挂状态栏：主题切换 / 日志 / 帮助，并与主窗 localStorage 同步 */}
         <Footer />
         <Toaster position="top-center" theme={theme} />
       </div>
@@ -268,9 +391,30 @@ function App(): React.JSX.Element {
         {/* 左侧导航栏 */}
         <Sidebar activeMenu={activeMenu} onMenuChange={setActiveMenu} />
 
-        {/* 主内容区：页面自带头部含切换按钮 */}
-        <main className="flex-1 overflow-auto bg-background min-w-0">
-          {renderPage(activeMenu, false, setActiveMenu)}
+        {/* 主内容区：终端页 keep-alive，其余按菜单挂载 */}
+        <main className="flex-1 overflow-auto bg-background min-w-0 relative">
+          {/* 独立窗打开时卸掉主窗终端 UI（PTY 仍在后端），避免两套 xterm 抢同一会话 */}
+          {(shellKeptAlive || activeMenu === 'hdc-shell') &&
+            !(panelOpenMap['hdc-shell'] ?? false) && (
+            <div
+              className={
+                activeMenu === 'hdc-shell'
+                  ? 'absolute inset-0 overflow-auto'
+                  : 'hidden'
+              }
+            >
+              <PageProvider
+                value={{
+                  menuId: 'hdc-shell',
+                  standalone: false,
+                  onNavigateTo: setActiveMenu
+                }}
+              >
+                <HdcShellPage visible={activeMenu === 'hdc-shell'} />
+              </PageProvider>
+            </div>
+          )}
+          {activeMenu !== 'hdc-shell' && renderPage(activeMenu, false, setActiveMenu)}
         </main>
       </div>
 

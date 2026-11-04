@@ -132,7 +132,7 @@ export function Header(): React.JSX.Element {
                 onOpenChange={(open) => {
                   if (open) handleRefresh()
                 }}
-                disabled={isLoading}
+                disabled={isLoading && !selectedDevice}
               >
                 <SelectTrigger
                   loading={isRefreshing || isLoading}
@@ -155,7 +155,7 @@ export function Header(): React.JSX.Element {
                       <span
                         className={`h-2 w-2 rounded-full flex-shrink-0 ${
                           selectedDevice.status === 'Connected'
-                            ? 'bg-green-500'
+                            ? 'bg-green-600 dark:bg-green-500'
                             : selectedDevice.status === 'Unauthorized'
                               ? 'bg-yellow-500'
                               : 'bg-red-500'
@@ -190,7 +190,7 @@ export function Header(): React.JSX.Element {
                           <span
                             className={`h-2 w-2 rounded-full flex-shrink-0 ${
                               device.status === 'Connected'
-                                ? 'bg-green-500'
+                                ? 'bg-green-600 dark:bg-green-500'
                                 : device.status === 'Unauthorized'
                                   ? 'bg-yellow-500'
                                   : 'bg-red-500'

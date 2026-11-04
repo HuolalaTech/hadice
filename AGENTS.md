@@ -4,6 +4,17 @@ Hadice：基于 **Wails v3** 的安卓 & 鸿蒙桌面调试工具（Go 后端 + 
 
 ## 快速启动
 
+推荐用根目录一键脚本（说明见 [`hadice.md`](./hadice.md)）：
+
+```bash
+./hadice.sh          # 交互菜单（默认不自动启动）
+./hadice.sh hot      # 热启动
+./hadice.sh app      # 编译本机 macOS App + DMG
+./hadice.sh help     # 完整说明（hadice.md）
+```
+
+或手动：
+
 ```bash
 go install github.com/wailsapp/wails/v3/cmd/wails3@latest
 

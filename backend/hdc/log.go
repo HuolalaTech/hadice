@@ -80,9 +80,8 @@ func StartHilogStream(connectKey string, options *HilogOptions, onLogLine func(*
 		return fmt.Errorf("HDC path not set")
 	}
 
-	// 构建命令参数
-	// 固定参数：-v color -v time -v msec -v wrap
-	args := []string{"-t", connectKey, "shell", "hilog", "-v", "color", "-v", "time", "-v", "msec", "-v", "wrap"}
+	// 固定参数：-v time -v msec -v wrap（不上 -v color：颜色由前端统一，避免与安卓 logcat 不一致）
+	args := []string{"-t", connectKey, "shell", "hilog", "-v", "time", "-v", "msec", "-v", "wrap"}
 
 	// 添加过滤选项
 	if options != nil {

@@ -198,3 +198,67 @@ body {
   outline-offset: -2px;
   background-color: oklch(0.65 0.15 50 / 0.1);
 }
+
+
+/* Wails 运行时拖入时自动加的类（dropzone 悬停反馈兜底） */
+.wails-dropzone-hover {
+  border-color: var(--app-primary) !important;
+  background-color: color-mix(in oklch, var(--app-primary) 15%, transparent) !important;
+  box-shadow: 0 0 0 4px color-mix(in oklch, var(--app-primary) 20%, transparent) !important;
+  color: var(--app-primary) !important;
+}
+
+/* 网页看看悬浮工具条：长条宽度由快到慢变长/变短，文字随长度淡入淡出 */
+.web-peek-bar {
+  display: flex;
+  height: 36px;
+  width: 36px;
+  max-width: 100%;
+  align-items: center;
+  overflow: hidden;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in oklch, var(--border) 80%, transparent);
+  background: color-mix(in oklch, var(--background) 95%, transparent);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+  backdrop-filter: blur(8px);
+  transform-origin: right center;
+  /* 由快到慢（ease-out），略慢便于看清 morph */
+  transition:
+    width 680ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 680ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.web-peek-bar.is-open {
+  width: 100%;
+  border-radius: 12px;
+  padding-left: 8px;
+  padding-right: 4px;
+}
+.web-peek-bar-body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  /* 收起：文字随变短淡出 */
+  transition: opacity 420ms cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+.web-peek-bar.is-open .web-peek-bar-body {
+  opacity: 1;
+  pointer-events: auto;
+  /* 展开：略晚于变长，随长度出现 */
+  transition: opacity 520ms cubic-bezier(0.22, 1, 0.36, 1) 120ms;
+}
+.web-peek-bar-fab {
+  transition:
+    width 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 280ms ease;
+}
+
+@keyframes icon-morph {
+  0% { transform: rotate(-120deg) scale(0.4); opacity: 0; filter: blur(2px); }
+  60% { transform: rotate(8deg) scale(1.18); opacity: 1; filter: blur(0); }
+  100% { transform: rotate(0deg) scale(1); opacity: 1; }
+}
+.icon-morph { animation: icon-morph 0.45s cubic-bezier(0.22, 1.15, 0.36, 1); }

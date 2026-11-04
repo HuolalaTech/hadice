@@ -1,13 +1,13 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import {
   Download,
-  FolderOpen,
   AlertCircle,
   Loader2,
   FileText,
   HardDrive,
   Clock,
-  Folder
+  Folder,
+  History
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -21,6 +21,12 @@ import { Badge } from '@/components/ui/badge'
 import { isHdcAvailable } from '@/lib/hdc'
 import { captureEvent } from '@/lib/posthog'
 import { formatFileSize } from '@/lib/format'
+import { cn } from '@/lib/utils'
+import { InstallHistoryList } from '@/components/app-install/InstallHistoryList'
+import { InstallSourcePicker } from '@/components/app-install/InstallSourcePicker'
+import { useInstallHistory } from '@/hooks/useInstallHistory'
+import { validateInstallPackageUrl } from '@/lib/install-url'
+import type { InstallPlatform, InstallSourceType } from '@/types/install'
 import { EventsOn } from '../../wailsjs/runtime/runtime'
 
 /**
@@ -81,6 +87,11 @@ interface InstallPackageInfo {
  */
 type HapAppInfo = InstallPackageInfo
 
+interface PackageOperation {
+  readonly id: number
+  readonly platform: InstallPlatform
+  readonly sourceType: InstallSourceType
+}
 
 /**
  * 格式化日期时间
@@ -101,6 +112,13 @@ function formatDateTime(timestamp: number): string {
  */
 export function AppInstallPage(): React.JSX.Element {
   const { selectedDevice } = useDeviceStore()
+  const platform: InstallPlatform =
+    selectedDevice?.platform === 'android' ? 'android' : 'harmonyos'
+  const [sourceType, setSourceType] = useState<InstallSourceType>('local')
+  const [sourceUrl, setSourceUrl] = useState('')
+  const [originalSource, setOriginalSource] = useState('')
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [isUrlPipelineBusy, setIsUrlPipelineBusy] = useState(false)
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
   const [appInfo, setAppInfo] = useState<HapAppInfo | null>(null)
   const [isParsing, setIsParsing] = useState(false)
@@ -108,13 +126,69 @@ export function AppInstallPage(): React.JSX.Element {
   const [parseError, setParseError] = useState<string | null>(null)
   const [fileModifiedTime, setFileModifiedTime] = useState<number | null>(null)
   const [isDragging, setIsDragging] = useState(false)
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const dropZoneRef = useRef<HTMLDivElement>(null)
+  const packageOperationIdRef = useRef(0)
+  const currentPlatformRef = useRef(platform)
+  const currentSourceTypeRef = useRef<InstallSourceType>(sourceType)
+  const historyState = useInstallHistory(platform)
+
+  useEffect(() => {
+    if (historyState.error) {
+      toast.error(`加载安装历史失败：${historyState.error}`)
+    }
+  }, [historyState.error])
+
+  if (currentPlatformRef.current !== platform) {
+    currentPlatformRef.current = platform
+    packageOperationIdRef.current += 1
+  }
+
+  const clearSelectedPackage = useCallback((): void => {
+    setSelectedFile(null)
+    setAppInfo(null)
+    setParseError(null)
+    setFileModifiedTime(null)
+    setOriginalSource('')
+    setIsParsing(false)
+    setIsDownloading(false)
+    setIsUrlPipelineBusy(false)
+  }, [])
+
+  const isCurrentPackageOperation = useCallback((operation: PackageOperation): boolean => {
+    return (
+      packageOperationIdRef.current === operation.id &&
+      currentPlatformRef.current === operation.platform &&
+      currentSourceTypeRef.current === operation.sourceType
+    )
+  }, [])
+
+  const beginPackageOperation = useCallback(
+    (operationSourceType: InstallSourceType): PackageOperation => {
+      currentSourceTypeRef.current = operationSourceType
+      setSourceType(operationSourceType)
+      const operation = {
+        id: ++packageOperationIdRef.current,
+        platform: currentPlatformRef.current,
+        sourceType: operationSourceType
+      }
+      clearSelectedPackage()
+      return operation
+    },
+    [clearSelectedPackage]
+  )
+
+  useEffect(() => {
+    clearSelectedPackage()
+  }, [platform, clearSelectedPackage])
 
   /**
    * 处理解析 HAP 文件
    */
   const handleParseHapFile = useCallback(
-    async (filePath: string) => {
+    async (filePath: string, operation: PackageOperation) => {
+      if (!isCurrentPackageOperation(operation)) return
+
       if (!isHdcAvailable()) {
         toast.error('HDC API 不可用')
         return
@@ -126,6 +200,8 @@ export function AppInstallPage(): React.JSX.Element {
       try {
         const result = await window.hdc.parseHapAppInfo(filePath)
 
+        if (!isCurrentPackageOperation(operation)) return
+
         if (result.success && result.info) {
           setAppInfo(result.info)
         } else {
@@ -133,14 +209,17 @@ export function AppInstallPage(): React.JSX.Element {
           toast.error(result.error || '解析失败')
         }
       } catch (error) {
+        if (!isCurrentPackageOperation(operation)) return
         const errorMsg = error instanceof Error ? error.message : '解析失败'
         setParseError(errorMsg)
         toast.error(errorMsg)
       } finally {
-        setIsParsing(false)
+        if (isCurrentPackageOperation(operation)) {
+          setIsParsing(false)
+        }
       }
     },
-    [isHdcAvailable]
+    [isCurrentPackageOperation]
   )
 
   /**
@@ -148,27 +227,31 @@ export function AppInstallPage(): React.JSX.Element {
    */
   const handleDroppedFile = useCallback(
     async (filePath: string) => {
-      const isAndroid = selectedDevice?.platform === 'android'
+      const isAndroid = currentPlatformRef.current === 'android'
       const supportedExtensions = isAndroid
-        ? ['.apk']
+        ? ['.apk', '.zip', '.gz', '.7z', '.tar', '.tgz']
         : ['.hap', '.zip', '.gz', '.7z', '.tar', '.tgz']
 
       const fileName = filePath.toLowerCase()
-      const isSupported = supportedExtensions.some(ext => fileName.endsWith(ext)) || (!isAndroid && fileName.endsWith('.tar.gz'))
+      const isSupported =
+        supportedExtensions.some((ext) => fileName.endsWith(ext)) || fileName.endsWith('.tar.gz')
       if (!isSupported) {
-        toast.error(isAndroid ? '支持 .apk 格式文件' : '支持 .hap、.zip 等格式文件')
+        toast.error(isAndroid ? '支持 .apk 或包含 apk 的压缩包' : '支持 .hap、.zip 等格式文件')
         return
       }
 
+      const operation = beginPackageOperation('local')
+      if (!isCurrentPackageOperation(operation)) return
       setSelectedFile(filePath)
-      setAppInfo(null)
-      setParseError(null)
-      setFileModifiedTime(null)
 
       // 获取文件信息（修改时间）
       try {
         const fileInfo = await window.hdc.getFileInfo(filePath)
-        if (fileInfo.success && fileInfo.modifiedTime) {
+        if (
+          isCurrentPackageOperation(operation) &&
+          fileInfo.success &&
+          fileInfo.modifiedTime
+        ) {
           setFileModifiedTime(fileInfo.modifiedTime)
         }
       } catch (error) {
@@ -176,9 +259,9 @@ export function AppInstallPage(): React.JSX.Element {
       }
 
       // 自动解析
-      await handleParseHapFile(filePath)
+      await handleParseHapFile(filePath, operation)
     },
-    [handleParseHapFile]
+    [beginPackageOperation, handleParseHapFile, isCurrentPackageOperation]
   )
 
   /**
@@ -214,88 +297,223 @@ export function AppInstallPage(): React.JSX.Element {
       return
     }
 
+    const operation = beginPackageOperation('local')
+
     try {
       const filePath = await window.hdc.selectHapFile(selectedDevice.connectKey)
-      if (filePath) {
+      if (filePath && isCurrentPackageOperation(operation)) {
         captureEvent('install file selected', { file_path: filePath })
         setSelectedFile(filePath)
-        setAppInfo(null)
-        setParseError(null)
-        setFileModifiedTime(null)
         
         try {
           const fileInfo = await window.hdc.getFileInfo(filePath)
-          if (fileInfo.success && fileInfo.modifiedTime) {
+          if (
+            isCurrentPackageOperation(operation) &&
+            fileInfo.success &&
+            fileInfo.modifiedTime
+          ) {
             setFileModifiedTime(fileInfo.modifiedTime)
           }
         } catch (error) {
           console.error('[AppInstallPage] Get file info error:', error)
         }
         
-        await handleParseHapFile(filePath)
+        await handleParseHapFile(filePath, operation)
       }
     } catch (error) {
+      if (!isCurrentPackageOperation(operation)) return
       console.error('[AppInstallPage] Select file error:', error)
       toast.error('选择文件失败')
     }
-  }, [isHdcAvailable, selectedDevice, handleParseHapFile])
+  }, [
+    beginPackageOperation,
+    handleParseHapFile,
+    isCurrentPackageOperation,
+    selectedDevice
+  ])
 
+  const handleSourceTypeChange = useCallback(
+    (nextSourceType: InstallSourceType): void => {
+      if (nextSourceType === sourceType) return
+      beginPackageOperation(nextSourceType)
+    },
+    [beginPackageOperation, sourceType]
+  )
 
-  /**
-   * 安装应用
-   */
-  const handleInstall = useCallback(async () => {
-    if (!selectedFile) {
-      toast.error('请先选择安装包')
+  const runInstall = useCallback(
+    async (options: {
+      readonly filePath: string
+      readonly installSourceType: InstallSourceType
+      readonly source: string
+    }): Promise<void> => {
+      if (!selectedDevice || !isHdcAvailable()) {
+        toast.error('请先选择设备')
+        return
+      }
+
+      setIsInstalling(true)
+      try {
+        const result = await window.hdc.installAppWithHistory(
+          selectedDevice.connectKey,
+          options.filePath,
+          options.installSourceType,
+          options.source
+        )
+
+        const allOutput = [result.output, result.error].filter(Boolean).join('\n').trim()
+        const installResult = allOutput.toLowerCase()
+        const isSuccess =
+          installResult.includes('success') ||
+          (result.success &&
+            !result.error &&
+            installResult.length > 0 &&
+            !installResult.includes('error') &&
+            !installResult.includes('fail'))
+
+        if (isSuccess) {
+          toast.success('安装成功')
+        } else if (installResult.includes('downgrade')) {
+          toast.error('安装失败，无法降级安装，请先卸载')
+        } else {
+          const errorMsg = result.error || result.output || '安装失败，若已安装请卸载旧版再尝试'
+          const finalErrorMsg =
+            errorMsg.length > 50 ? '安装失败，若已安装请卸载旧版再尝试' : errorMsg
+          toast.error(finalErrorMsg)
+        }
+
+        if (result.cachedPath) {
+          setSelectedFile(result.cachedPath)
+        }
+
+        if (result.historyWarning) {
+          toast.error(`应用已处理，但历史记录保存失败：${result.historyWarning}`)
+        }
+      } catch (error) {
+        console.error('[AppInstallPage] Install app error:', error)
+        const errorMessage =
+          error instanceof Error ? error.message : '安装失败，请检查文件路径和设备连接'
+        toast.error(errorMessage)
+      } finally {
+        try {
+          await historyState.refreshHistory()
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : '刷新安装历史失败'
+          toast.error(errorMessage)
+        }
+        setIsInstalling(false)
+      }
+    },
+    [historyState, selectedDevice]
+  )
+
+  const handleDownloadPackage = useCallback(async (overrideUrl?: string): Promise<void> => {
+    if (isUrlPipelineBusy) return
+
+    const trimmedUrl = (overrideUrl ?? sourceUrl).trim()
+    const urlError = validateInstallPackageUrl(trimmedUrl, currentPlatformRef.current)
+    if (urlError) {
+      toast.error(urlError)
       return
     }
-
     if (!selectedDevice || !isHdcAvailable()) {
       toast.error('请先选择设备')
       return
     }
 
-    setIsInstalling(true)
+    const operation = beginPackageOperation('url')
+    if (!isCurrentPackageOperation(operation)) return
+    setIsUrlPipelineBusy(true)
+    setIsDownloading(true)
 
     try {
-      const result = await window.hdc.installApp(
-        selectedDevice.connectKey,
-        selectedFile
+      const result = await window.hdc.downloadInstallPackage(
+        trimmedUrl,
+        operation.platform
       )
+      if (!isCurrentPackageOperation(operation)) return
 
-      // 合并所有输出信息用于判断
-      const allOutput = [result.output, result.error].filter(Boolean).join('\n').trim()
-      const installResult = allOutput.toLowerCase()
+      setSelectedFile(result.filePath)
+      setAppInfo(result.info as HapAppInfo)
+      setOriginalSource(trimmedUrl)
+      setIsDownloading(false)
 
-      // 根据输出内容判断安装结果
-      const isSuccess = installResult.includes('success') || 
-        (result.success && !result.error && installResult.length > 0 && 
-         !installResult.includes('error') && !installResult.includes('fail'))
-
-      if (isSuccess) {
-        toast.success('安装成功')
-      } else if (installResult.includes('downgrade')) {
-        toast.error('安装失败', {
-          description: allOutput || '无法降级安装，请先卸载旧版本后重试',
-          duration: 5000
-        })
-      } else {
-        toast.error('安装失败', {
-          description: allOutput || '未收到设备错误详情，请检查安装包和设备连接',
-          duration: 5000
-        })
-      }
-    } catch (error) {
-      console.error('[AppInstallPage] Install app error:', error)
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      toast.error('安装失败', {
-        description: errorMessage || '请检查安装包路径和设备连接',
-        duration: 5000
+      await runInstall({
+        filePath: result.filePath,
+        installSourceType: 'url',
+        source: trimmedUrl
       })
+    } catch (error) {
+      if (!isCurrentPackageOperation(operation)) return
+      const errorMessage = error instanceof Error ? error.message : '下载安装包失败'
+      setParseError(errorMessage)
+      toast.error(errorMessage)
     } finally {
-      setIsInstalling(false)
+      if (isCurrentPackageOperation(operation)) {
+        setIsDownloading(false)
+        setIsUrlPipelineBusy(false)
+      }
     }
-  }, [selectedDevice, selectedFile, isHdcAvailable])
+  }, [
+    beginPackageOperation,
+    isCurrentPackageOperation,
+    isUrlPipelineBusy,
+    runInstall,
+    selectedDevice,
+    sourceUrl
+  ])
+
+  const handleInstall = useCallback(async () => {
+    if (!selectedFile) {
+      toast.error('请先选择安装包')
+      return
+    }
+    await runInstall({
+      filePath: selectedFile,
+      installSourceType: sourceType,
+      source: sourceType === 'url' ? originalSource : selectedFile
+    })
+  }, [originalSource, runInstall, selectedFile, sourceType])
+
+  const handleReinstall = useCallback(
+    async (historyId: string): Promise<void> => {
+      try {
+        const result = await historyState.reinstall(selectedDevice.connectKey, historyId)
+        if (result.success) {
+          toast.success('重新安装成功')
+        } else {
+          toast.error(result.error || '重新安装失败')
+        }
+        if (result.historyWarning) {
+          toast.error(`应用已处理，但历史记录保存失败：${result.historyWarning}`)
+        }
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : '重新安装失败')
+      }
+    },
+    [historyState, selectedDevice?.connectKey]
+  )
+
+  const handleDeleteHistory = useCallback(
+    async (historyId: string): Promise<void> => {
+      try {
+        await historyState.remove(historyId)
+        toast.success('历史记录已删除')
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : '删除历史记录失败')
+      }
+    },
+    [historyState]
+  )
+
+  const handleClearHistory = useCallback(async (): Promise<void> => {
+    try {
+      await historyState.clear()
+      toast.success('当前平台安装历史已清空')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '清空安装历史失败')
+      throw error
+    }
+  }, [historyState])
 
   // 未连接设备
   if (!selectedDevice) {
@@ -317,7 +535,7 @@ export function AppInstallPage(): React.JSX.Element {
   }
 
   return (
-    <div className="p-6 h-full flex flex-col overflow-y-auto">
+    <div className="p-6 h-full flex flex-col overflow-hidden">
       {/* 标题栏 */}
       <div className="mb-4 flex items-center justify-between flex-shrink-0">
         <h1 className="text-2xl font-bold flex items-center gap-3">
@@ -328,20 +546,24 @@ export function AppInstallPage(): React.JSX.Element {
         </h1>
         <div className="flex items-center gap-3">
           <Button
-            onClick={handleSelectHapFile}
-            disabled={isParsing || isInstalling}
-            variant="outline"
+            type="button"
+            variant={isHistoryOpen ? 'secondary' : 'outline'}
             className="gap-2"
+            onClick={() => setIsHistoryOpen((open) => !open)}
+            aria-expanded={isHistoryOpen}
           >
-            <FolderOpen className="h-4 w-4" />
-            选择安装包
+            <History className="h-4 w-4" aria-hidden="true" />
+            安装历史
+            {historyState.history.length > 0 && (
+              <Badge variant="secondary">{historyState.history.length}</Badge>
+            )}
           </Button>
           <Button
             onClick={handleInstall}
-            disabled={isInstalling}
+            disabled={isInstalling || isUrlPipelineBusy || !selectedFile}
             className={`gap-2 ${!selectedFile ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
-            {isInstalling ? (
+            {isInstalling && !isUrlPipelineBusy ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
                 正在安装...
@@ -355,6 +577,31 @@ export function AppInstallPage(): React.JSX.Element {
           </Button>
         </div>
       </div>
+
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+      <div
+        className={cn(
+          'absolute inset-0 flex flex-col overflow-y-auto transition-transform duration-500 will-change-transform',
+          '[transition-timing-function:cubic-bezier(0.16,1,0.3,1)]',
+          isHistoryOpen ? 'pointer-events-none -translate-y-full' : 'translate-y-0'
+        )}
+        aria-hidden={isHistoryOpen}
+      >
+      <Card className="mb-4 flex-shrink-0">
+        <CardContent className="pt-6">
+          <InstallSourcePicker
+            platform={platform}
+            sourceType={sourceType}
+            url={sourceUrl}
+            isLocalBusy={isParsing || isInstalling}
+            isUrlWorking={isUrlPipelineBusy}
+            onSourceTypeChange={handleSourceTypeChange}
+            onUrlChange={setSourceUrl}
+            onSelectFile={handleSelectHapFile}
+            onDownload={handleDownloadPackage}
+          />
+        </CardContent>
+      </Card>
 
       {/* 文件信息区域 */}
       {selectedFile && (
@@ -481,6 +728,23 @@ export function AppInstallPage(): React.JSX.Element {
                   <span className="font-mono break-all">{appInfo.bundleName}</span>
                 </div>
               </div>
+              <Button
+                onClick={handleInstall}
+                disabled={isInstalling || isUrlPipelineBusy || !selectedFile}
+                className="flex-shrink-0 gap-2"
+              >
+                {isInstalling && !isUrlPipelineBusy ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    正在安装...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" />
+                    安装应用
+                  </>
+                )}
+              </Button>
             </div>
 
             <Tabs defaultValue="basic" className="w-full">
@@ -651,22 +915,47 @@ export function AppInstallPage(): React.JSX.Element {
       {!selectedFile && (
         <Card
           ref={dropZoneRef}
-          className={`flex-1 flex items-center justify-center bg-black transition-all duration-200 ${
+          className={`flex-1 flex items-center justify-center transition-all duration-200 ${
             isDragging ? 'ring-2 ring-primary bg-primary/10' : ''
           }`}
-          // data-file-drop-target 是 Wails 识别文件拖放区域的必需属性
+          // data-file-drop-target 是 @wailsio/runtime alpha.79 识别文件拖放区域的必需属性
           data-file-drop-target
         >
           <div className="text-center text-muted-foreground p-8">
             <Download className={`h-16 w-16 mx-auto mb-4 ${isDragging ? 'opacity-60 animate-pulse' : 'opacity-30'}`} />
             <p className="text-lg">点击"选择安装包"</p>
             <p className="text-sm mt-2">
-              或将文件拖放到此处(支持{selectedDevice?.platform === 'android' ? '.apk' : '.hap、.hsp、.har、.zip、.gz、.7z、.tar等'}格式)
+              或将文件拖放到此处(支持{selectedDevice?.platform === 'android' ? '.apk、.zip、.gz、.7z、.tar等' : '.hap、.hsp、.har、.zip、.gz、.7z、.tar等'}格式)
             </p>
           </div>
         </Card>
       )}
+      </div>
 
+      <div
+        className={cn(
+          'absolute inset-0 transition-transform duration-500 will-change-transform',
+          '[transition-timing-function:cubic-bezier(0.16,1,0.3,1)]',
+          isHistoryOpen ? 'translate-y-0' : 'pointer-events-none translate-y-full'
+        )}
+        aria-hidden={!isHistoryOpen}
+      >
+        <InstallHistoryList
+          platform={platform}
+          history={historyState.history}
+          isLoading={historyState.isLoading}
+          activeHistoryId={historyState.activeHistoryId}
+          onClose={() => setIsHistoryOpen(false)}
+          onReinstall={(historyId) => {
+            void handleReinstall(historyId)
+          }}
+          onDelete={(historyId) => {
+            void handleDeleteHistory(historyId)
+          }}
+          onClear={handleClearHistory}
+        />
+      </div>
+      </div>
     </div>
   )
 }

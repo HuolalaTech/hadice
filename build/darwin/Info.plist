@@ -10,11 +10,11 @@
         <key>CFBundleIdentifier</key>
             <string>com.haivo.hadice</string>
         <key>CFBundleVersion</key>
-            <string>2.3.1</string>
+            <string>2.3.10</string>
         <key>CFBundleGetInfoString</key>
             <string>Device Testing and Debugging Tool</string>
         <key>CFBundleShortVersionString</key>
-            <string>2.3.1</string>
+            <string>2.3.10</string>
         <key>CFBundleIconFile</key>
             <string>icons</string>
         <key>LSMinimumSystemVersion</key>
@@ -23,5 +23,13 @@
             <string>true</string>
         <key>NSHumanReadableCopyright</key>
             <string>© 2026, Haivo</string>
+        <!-- 网页看看：WKWebView 需允许明文 http（如内网 IP 调试页）；仅放开 WebContent -->
+        <key>NSAppTransportSecurity</key>
+        <dict>
+            <key>NSAllowsArbitraryLoadsInWebContent</key>
+            <true/>
+            <key>NSAllowsLocalNetworking</key>
+            <true/>
+        </dict>
     </dict>
 </plist>

@@ -33,28 +33,54 @@ type shellTerminalConfig struct {
 	Env     []string
 }
 
+const maxShellScrollback = 256 * 1024
+
 // ShellProcess represents one local shell session.
 type ShellProcess struct {
-	ID       string
-	Pty      shellTerminal
-	mu       sync.Mutex
-	isClosed bool
-	close    sync.Once
+	ID         string
+	Pty        shellTerminal
+	mu         sync.Mutex
+	scrollMu   sync.Mutex
+	scrollback []byte
+	isClosed   bool
+	close      sync.Once
+}
+
+// ShellTabInfo 前端终端 Tab（跨主窗/独立窗共享）。
+type ShellTabInfo struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
+// ShellUIState 终端 UI 状态：tabs + xterm serialize 快照。
+// ponytail: 存在 Go 进程内存，因 Wails 双 WebView 不共享 localStorage。
+type ShellUIState struct {
+	Tabs        []ShellTabInfo     `json:"tabs"`
+	ActiveTabId string             `json:"activeTabId"`
+	TabSeq      int                `json:"tabSeq"`
+	Snapshots   map[string]string  `json:"snapshots"`
 }
 
 var (
 	activeShells = make(map[string]*ShellProcess)
 	shellMutex   sync.RWMutex
+
+	shellUIMu sync.Mutex
+	shellUI   = ShellUIState{
+		Tabs:      nil,
+		Snapshots: map[string]string{},
+	}
 )
 
 // StartShell starts a local command shell.
+// 若同 ID 已在跑，直接附着（不重建），便于主窗 / 独立窗切换复用会话。
 func (a *App) StartShell(shellId string) (bool, error) {
 	shellMutex.Lock()
 	defer shellMutex.Unlock()
 
-	if existing, ok := activeShells[shellId]; ok {
-		existing.stop()
-		delete(activeShells, shellId)
+	if _, ok := activeShells[shellId]; ok {
+		log.Printf("[Shell] Attach existing shell: %s", shellId)
+		return true, nil
 	}
 
 	shellCommand := os.Getenv("SHELL")
@@ -201,8 +227,112 @@ func (a *App) StopShell(shellId string) error {
 
 	shellProcess.stop()
 	delete(activeShells, shellId)
+	shellUIMu.Lock()
+	delete(shellUI.Snapshots, shellId)
+	shellUIMu.Unlock()
 	log.Printf("[Shell] Shell stopped: %s", shellId)
 	return nil
+}
+
+// RestartShell 强制结束并重建会话（对应 UI「重启终端」）。
+func (a *App) RestartShell(shellId string) (bool, error) {
+	shellMutex.Lock()
+	if shellProcess, ok := activeShells[shellId]; ok {
+		shellProcess.stop()
+		delete(activeShells, shellId)
+		log.Printf("[Shell] Shell stopped for restart: %s", shellId)
+	}
+	shellMutex.Unlock()
+	return a.StartShell(shellId)
+}
+
+// GetShellScrollback 返回会话近期输出，供窗口切换后回放历史。
+func (a *App) GetShellScrollback(shellId string) (string, error) {
+	shellMutex.RLock()
+	shellProcess, ok := activeShells[shellId]
+	shellMutex.RUnlock()
+	if !ok {
+		return "", nil
+	}
+	shellProcess.scrollMu.Lock()
+	defer shellProcess.scrollMu.Unlock()
+	if len(shellProcess.scrollback) == 0 {
+		return "", nil
+	}
+	return string(shellProcess.scrollback), nil
+}
+
+// GetShellUIState 返回跨窗口共享的终端 tabs / 快照。
+func (a *App) GetShellUIState() ShellUIState {
+	shellUIMu.Lock()
+	defer shellUIMu.Unlock()
+	out := ShellUIState{
+		Tabs:        append([]ShellTabInfo(nil), shellUI.Tabs...),
+		ActiveTabId: shellUI.ActiveTabId,
+		TabSeq:      shellUI.TabSeq,
+		Snapshots:   make(map[string]string, len(shellUI.Snapshots)),
+	}
+	for k, v := range shellUI.Snapshots {
+		out.Snapshots[k] = v
+	}
+	return out
+}
+
+// SetShellUIState 由即将卸下的窗口写入，供另一窗口附着恢复。
+func (a *App) SetShellUIState(state ShellUIState) {
+	shellUIMu.Lock()
+	defer shellUIMu.Unlock()
+	shellUI.Tabs = append([]ShellTabInfo(nil), state.Tabs...)
+	shellUI.ActiveTabId = state.ActiveTabId
+	shellUI.TabSeq = state.TabSeq
+	// 禁止用空 snapshots 覆盖已有内容（另一窗 boot/竞态 push 会误清空）
+	if len(state.Snapshots) > 0 {
+		shellUI.Snapshots = make(map[string]string, len(state.Snapshots))
+		for k, v := range state.Snapshots {
+			if v != "" {
+				shellUI.Snapshots[k] = v
+			}
+		}
+	} else if shellUI.Snapshots == nil {
+		shellUI.Snapshots = map[string]string{}
+	}
+	log.Printf("[Shell] UI state saved: tabs=%d snapshots=%d active=%s",
+		len(shellUI.Tabs), len(shellUI.Snapshots), shellUI.ActiveTabId)
+}
+
+// SetShellSnapshot 单独更新某一会话的 xterm 序列化快照。
+func (a *App) SetShellSnapshot(shellId string, snapshot string) {
+	if shellId == "" {
+		return
+	}
+	shellUIMu.Lock()
+	defer shellUIMu.Unlock()
+	if shellUI.Snapshots == nil {
+		shellUI.Snapshots = map[string]string{}
+	}
+	if snapshot == "" {
+		delete(shellUI.Snapshots, shellId)
+	} else {
+		shellUI.Snapshots[shellId] = snapshot
+	}
+}
+
+// GetShellSnapshot 读取某一会话的 xterm 序列化快照。
+func (a *App) GetShellSnapshot(shellId string) string {
+	shellUIMu.Lock()
+	defer shellUIMu.Unlock()
+	if shellUI.Snapshots == nil {
+		return ""
+	}
+	return shellUI.Snapshots[shellId]
+}
+
+// IsShellRunning 判断会话是否仍在后端存活。
+func (a *App) IsShellRunning(shellId string) bool {
+	shellMutex.RLock()
+	defer shellMutex.RUnlock()
+	_, ok := activeShells[shellId]
+	return ok
 }
 
 // StopAllShells stops all shell sessions.
@@ -219,14 +349,25 @@ func (a *App) StopAllShells() error {
 	return nil
 }
 
+func (sp *ShellProcess) appendScrollback(chunk []byte) {
+	sp.scrollMu.Lock()
+	defer sp.scrollMu.Unlock()
+	sp.scrollback = append(sp.scrollback, chunk...)
+	if len(sp.scrollback) > maxShellScrollback {
+		sp.scrollback = append([]byte(nil), sp.scrollback[len(sp.scrollback)-maxShellScrollback:]...)
+	}
+}
+
 func (sp *ShellProcess) readOutput(shellId string) {
 	buffer := make([]byte, 4096)
 	for {
 		n, err := sp.Pty.Read(buffer)
 		if n > 0 {
+			chunk := append([]byte(nil), buffer[:n]...)
+			sp.appendScrollback(chunk)
 			app := application.Get()
 			if app != nil {
-				app.Event.Emit(fmt.Sprintf("shell:stdout:%s", shellId), string(buffer[:n]))
+				app.Event.Emit(fmt.Sprintf("shell:stdout:%s", shellId), string(chunk))
 			}
 		}
 		if err != nil {

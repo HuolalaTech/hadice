@@ -1,11 +1,19 @@
-import React, { useState } from 'react'
-import { ChevronDown, ChevronRight, Copy, Check } from 'lucide-react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { Check, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Copy, Globe, PanelRightClose, Star } from 'lucide-react'
+import CodeMirror, { EditorView } from '@uiw/react-codemirror'
+import { json } from '@codemirror/lang-json'
+import { foldAll, unfoldAll } from '@codemirror/language'
 import { toast } from 'sonner'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { getNetworkRequestKey } from '@/lib/network-request-key'
+import { stripUrlForFavorite } from '@/lib/network-url'
+import { openWebPeek } from '@/lib/open-web-peek'
 import { copyTextToClipboard } from '@/lib/clipboard'
+import { cn } from '@/lib/utils'
+import { useNetworkFavoriteStore } from '@/store/networkFavoriteStore'
+import { useThemeStore } from '@/store/themeStore'
 import type { NetworkRequest } from '@/types/hdc'
 
 interface NetworkRequestDetailProps {
@@ -20,6 +28,8 @@ interface NetworkRequestDetailProps {
     matches: Array<{ start: number; end: number; text: string }>
   }>
   isRegexMode: boolean
+  /** 折叠右侧详情面板（Task 5/6 接按钮） */
+  onCollapsePanel?: () => void
 }
 
 /**
@@ -54,16 +64,61 @@ function formatTimestamp(timestamp: number): string {
 }
 
 /**
- * 格式化JSON
+ * 是否像 JSON（对象/数组；含双重引号包裹的 JSON 字符串）
  */
-function formatJSON(json: string | undefined): string {
-  if (!json) return ''
+function looksLikeJSON(text: string | undefined): boolean {
+  if (!text) return false
+  const trimmed = text.replace(/^\uFEFF/, '').trim()
+  if (!trimmed) return false
+  if (
+    (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+    (trimmed.startsWith('[') && trimmed.endsWith(']'))
+  ) {
+    return true
+  }
+  // 双重编码：整段是 JSON 字符串
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    try {
+      const inner = JSON.parse(trimmed)
+      return typeof inner === 'string' && looksLikeJSON(inner)
+    } catch {
+      return false
+    }
+  }
+  return false
+}
+
+/**
+ * 格式化 JSON（对齐 Mock：缩进 2；支持 BOM / 双重编码）
+ */
+function formatJSON(raw: string | undefined): string {
+  if (!raw) return ''
+  const text = raw.replace(/^\uFEFF/, '').trim()
+  if (!text) return raw
   try {
-    const parsed = JSON.parse(json)
+    let parsed: unknown = JSON.parse(text)
+    // 双重编码：解析后仍是 JSON 字符串则再解一层
+    if (typeof parsed === 'string') {
+      const inner = parsed.trim()
+      if (
+        (inner.startsWith('{') && inner.endsWith('}')) ||
+        (inner.startsWith('[') && inner.endsWith(']'))
+      ) {
+        try {
+          parsed = JSON.parse(inner)
+        } catch {
+          // keep string
+        }
+      }
+    }
     return JSON.stringify(parsed, null, 2)
   } catch {
-    return json
+    return raw
   }
+}
+
+function isJSONFormatted(text: string): boolean {
+  return text.includes('\n') && looksLikeJSON(text)
 }
 
 /**
@@ -334,6 +389,168 @@ function HighlightText({
   }
 }
 
+const jsonViewerTheme = EditorView.theme({
+  '&': {
+    width: '100%',
+    maxWidth: '100%',
+    minWidth: '0',
+    overflow: 'hidden',
+    fontSize: '12px'
+  },
+  '.cm-editor': {
+    width: '100%',
+    maxWidth: '100%',
+    minWidth: '0'
+  },
+  '& .cm-scroller': {
+    maxWidth: '100%',
+    maxHeight: '480px',
+    overflowX: 'auto',
+    overflowY: 'auto'
+  },
+  '& .cm-content': {
+    width: 'fit-content',
+    minWidth: '100%'
+  },
+  '& .cm-line': {
+    whiteSpace: 'pre'
+  }
+})
+
+/**
+ * JSON 响应/请求体：默认格式化，CodeMirror 展示（对齐 Mock）
+ */
+function JsonBodyBlock({
+  raw,
+  searchQuery,
+  isRegexMode
+}: {
+  raw: string
+  searchQuery?: string
+  isRegexMode?: boolean
+}): React.JSX.Element {
+  const theme = useThemeStore((s) => s.theme)
+  const [text, setText] = useState(() => formatJSON(raw))
+  const [copied, setCopied] = useState(false)
+  const [folded, setFolded] = useState(false)
+  const editorViewRef = useRef<EditorView | null>(null)
+
+  useEffect(() => {
+    setText(formatJSON(raw))
+    setFolded(false)
+  }, [raw])
+
+  const extensions = useMemo(() => [json(), jsonViewerTheme, EditorView.editable.of(false)], [])
+  const searching = Boolean(searchQuery?.trim())
+
+  const handleToggleFold = (): void => {
+    const view = editorViewRef.current
+    if (!view) return
+    if (folded) {
+      unfoldAll(view)
+      setFolded(false)
+    } else {
+      foldAll(view)
+      setFolded(true)
+    }
+  }
+
+  const handleFormat = (): void => {
+    const next = formatJSON(text)
+    if (next === text && !isJSONFormatted(text)) {
+      // 尝试对原始 raw 再格式化一次
+      const fromRaw = formatJSON(raw)
+      if (fromRaw === raw) {
+        toast.error('JSON 格式错误，无法格式化')
+        return
+      }
+      setText(fromRaw)
+      toast.success('JSON 格式化成功')
+      return
+    }
+    if (next === text && isJSONFormatted(text)) {
+      toast.success('已是格式化 JSON')
+      return
+    }
+    setText(next)
+    toast.success('JSON 格式化成功')
+  }
+
+  const handleCopy = async (): Promise<void> => {
+    const success = await copyTextToClipboard(text)
+    if (success) {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } else {
+      toast.error('复制失败')
+    }
+  }
+
+  // 搜索命中时退回可高亮的 pre，内容仍用已格式化文本
+  if (searching) {
+    return (
+      <CodeBlock
+        content={text}
+        language="json"
+        searchQuery={searchQuery}
+        isRegexMode={isRegexMode}
+      />
+    )
+  }
+
+  return (
+    <div className="relative w-full max-w-full min-w-0 overflow-hidden space-y-2">
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" size="sm" className="h-6 w-6 p-0 flex-shrink-0" onClick={() => void handleCopy()} title="复制">
+          {copied ? <Check className="h-3 w-3 text-green-700 dark:text-green-400" /> : <Copy className="h-3 w-3" />}
+        </Button>
+        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleFormat}>
+          格式化 JSON
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 w-7 p-0"
+          onClick={handleToggleFold}
+          title={folded ? '全部展开' : '全部折叠'}
+        >
+          {folded ? (
+            <ChevronsUpDown className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronsDownUp className="h-3.5 w-3.5" />
+          )}
+        </Button>
+      </div>
+      <div className="min-w-0 overflow-hidden rounded-md border bg-muted">
+        <CodeMirror
+          value={text || '(空)'}
+          height="auto"
+          minHeight="80px"
+          maxHeight="480px"
+          width="100%"
+          maxWidth="100%"
+          theme={theme}
+          editable={false}
+          basicSetup={{
+            lineNumbers: true,
+            foldGutter: true,
+            highlightActiveLine: false,
+            bracketMatching: true,
+            closeBrackets: false,
+            autocompletion: false,
+            searchKeymap: false
+          }}
+          extensions={extensions}
+          onCreateEditor={(view) => {
+            editorViewRef.current = view
+          }}
+          className="w-full max-w-full min-w-0 text-xs"
+        />
+      </div>
+    </div>
+  )
+}
+
 /**
  * 代码块组件
  */
@@ -372,7 +589,7 @@ function CodeBlock({
           onClick={handleCopy}
         >
           {copied ? (
-            <Check className="h-3 w-3 text-green-500" />
+            <Check className="h-3 w-3 text-green-700 dark:text-green-400" />
           ) : (
             <Copy className="h-3 w-3" />
           )}
@@ -428,27 +645,32 @@ function KeyValueList({
 
 /**
  * URL 查询参数项目组件
+ * ponytail: WebView hover 不可靠，改为点击行显示复制按钮
  */
 function URLQueryParamItem({
   paramKey,
   value,
   searchQuery,
-  isRegexMode
+  isRegexMode,
+  selected,
+  onSelect
 }: {
   paramKey: string
   value: unknown
   searchQuery?: string
   isRegexMode?: boolean
+  selected: boolean
+  onSelect: () => void
 }): React.JSX.Element {
   const stringValue = String(value)
   const prettifiedJSON = parseAndPretifyJSON(value)
   const [copied, setCopied] = useState(false)
-  
-  // 如果有美化的JSON，只显示美化版本；否则显示原始值
-  const displayContent = prettifiedJSON || stringValue
-  
-  const handleCopy = async (): Promise<void> => {
-    const success = await copyTextToClipboard(displayContent)
+
+  const handleCopy = async (e: React.MouseEvent): Promise<void> => {
+    e.preventDefault()
+    e.stopPropagation()
+    // 字段 + 值两部分（query 形态，便于粘贴）
+    const success = await copyTextToClipboard(`${paramKey}=${stringValue}`)
     if (success) {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
@@ -456,39 +678,41 @@ function URLQueryParamItem({
       toast.error('复制失败')
     }
   }
-  
+
   return (
-    <div>
+    <div
+      className="py-0.5 cursor-pointer rounded-md px-1 -mx-1 hover:bg-secondary/40"
+      onClick={onSelect}
+    >
       <div className="flex items-baseline gap-2 text-sm">
         <span className="font-medium text-muted-foreground min-w-fit flex-shrink-0">{paramKey}:</span>
-        <div className="flex-1 min-w-0">
+        {selected && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-4 w-4 p-0 flex-shrink-0"
+            onClick={(e) => void handleCopy(e)}
+            title={`复制 ${paramKey}=…`}
+            aria-label={`复制参数 ${paramKey}`}
+          >
+            {copied ? (
+              <Check className="h-3 w-3 text-green-700 dark:text-green-400" />
+            ) : (
+              <Copy className="h-3 w-3" />
+            )}
+          </Button>
+        )}
+        <div className="min-w-0 flex-1">
           {prettifiedJSON ? (
-            // 显示美化的 JSON，有复制按钮在上面
-            <div className="w-full max-w-full overflow-hidden">
-              <div className="flex gap-2 items-center mb-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0 flex-shrink-0"
-                  onClick={handleCopy}
-                >
-                  {copied ? (
-                    <Check className="h-3 w-3 text-green-500" />
-                  ) : (
-                    <Copy className="h-3 w-3" />
-                  )}
-                </Button>
-              </div>
-              <pre className="text-xs font-mono whitespace-pre-wrap break-words text-foreground/80 bg-secondary/50 rounded-md p-2">
-                {searchQuery?.trim() ? (
-                  <HighlightText text={prettifiedJSON} searchQuery={searchQuery} isRegexMode={isRegexMode || false} />
-                ) : (
-                  prettifiedJSON
-                )}
-              </pre>
-            </div>
+            <pre className="text-xs font-mono whitespace-pre-wrap break-words text-foreground/80 bg-secondary/50 rounded-md p-2 overflow-hidden">
+              {searchQuery?.trim() ? (
+                <HighlightText text={prettifiedJSON} searchQuery={searchQuery} isRegexMode={isRegexMode || false} />
+              ) : (
+                prettifiedJSON
+              )}
+            </pre>
           ) : (
-            // 显示原始值
             <span className="font-mono text-xs break-all text-foreground/80">
               {searchQuery?.trim() ? (
                 <HighlightText text={stringValue} searchQuery={searchQuery} isRegexMode={isRegexMode || false} />
@@ -516,14 +740,30 @@ function URLQueryParamsSection({
   searchQuery?: string
   isRegexMode?: boolean
 }): React.JSX.Element {
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
+
   if (!params || Object.keys(params).length === 0) {
     return <div className="text-sm text-muted-foreground">(无参数)</div>
   }
 
   return (
-    <div className="space-y-2">
+    <div
+      className="space-y-2"
+      onClick={(e) => {
+        // 点空白处取消选中
+        if (e.target === e.currentTarget) setSelectedKey(null)
+      }}
+    >
       {Object.entries(params).map(([key, value]) => (
-        <URLQueryParamItem key={key} paramKey={key} value={value} searchQuery={searchQuery} isRegexMode={isRegexMode} />
+        <URLQueryParamItem
+          key={key}
+          paramKey={key}
+          value={value}
+          searchQuery={searchQuery}
+          isRegexMode={isRegexMode}
+          selected={selectedKey === key}
+          onSelect={() => setSelectedKey((prev) => (prev === key ? null : key))}
+        />
       ))}
     </div>
   )
@@ -536,13 +776,49 @@ export function NetworkRequestDetail({
   request,
   searchQuery,
   searchMatches,
-  isRegexMode
+  isRegexMode,
+  onCollapsePanel
 }: NetworkRequestDetailProps): React.JSX.Element {
+  const toggleFavorite = useNetworkFavoriteStore((s) => s.toggleFavorite)
+  // 必须订阅 favorites 数组，不能只取 isFavorite 函数引用（否则收藏变化不重渲）
+  const favoriteKey = request ? stripUrlForFavorite(request) : ''
+  const isFav = useNetworkFavoriteStore((s) =>
+    favoriteKey ? s.favorites.includes(favoriteKey) : false
+  )
+
+  const detailToolbar = (
+    <div className="flex items-center gap-1 px-2 py-1 border-b border-border shrink-0">
+      <span className="text-xs font-medium text-muted-foreground flex-1">响应详情</span>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7"
+        disabled={!request || !favoriteKey}
+        title={isFav ? '取消收藏' : '收藏（保留到第一个 & 前）'}
+        onClick={() => {
+          if (!request) return
+          toggleFavorite(request)
+        }}
+      >
+        <Star className={cn('h-3.5 w-3.5', isFav && 'fill-amber-500 text-amber-500')} />
+      </Button>
+      {onCollapsePanel && (
+        <Button type="button" variant="ghost" size="icon" className="h-7 w-7" title="折叠详情" onClick={onCollapsePanel}>
+          <PanelRightClose className="h-3.5 w-3.5" />
+        </Button>
+      )}
+    </div>
+  )
+
   if (!request) {
     return (
-      <div className="flex items-center justify-center h-full text-muted-foreground">
-        <div className="text-center">
-          <p className="text-sm">请选择一个请求查看详情</p>
+      <div className="h-full flex flex-col overflow-hidden">
+        {detailToolbar}
+        <div className="flex flex-1 items-center justify-center text-muted-foreground">
+          <div className="text-center">
+            <p className="text-sm">请选择一个请求查看详情</p>
+          </div>
         </div>
       </div>
     )
@@ -566,6 +842,7 @@ export function NetworkRequestDetail({
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
+      {detailToolbar}
       <Tabs defaultValue="request" className="w-full h-full flex flex-col">
         <TabsList className="w-full flex-shrink-0">
           <TabsTrigger value="request" className="flex-1 flex items-center justify-center gap-2">
@@ -615,6 +892,18 @@ export function NetworkRequestDetail({
                   title="复制完整 URL"
                 >
                   <Copy className="h-3 w-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-4 w-4 p-0 flex-shrink-0"
+                  title="网页看看（应用内打开）"
+                  onClick={() => {
+                    const fullURL = buildFullURL(request.baseURL, request.fullUrl || request.url, request.requestParams)
+                    void openWebPeek(fullURL)
+                  }}
+                >
+                  <Globe className="h-3 w-3" />
                 </Button>
                 <span 
                   className="font-mono text-xs text-foreground/80 flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"
@@ -674,12 +963,19 @@ export function NetworkRequestDetail({
           {/* Request Body */}
           {request.requestBody && (
             <CollapsibleSection title="Body" defaultOpen={true}>
-              <CodeBlock
-                content={formatJSON(request.requestBody)}
-                language="json"
-                searchQuery={searchQuery}
-                isRegexMode={isRegexMode}
-              />
+              {looksLikeJSON(request.requestBody) ? (
+                <JsonBodyBlock
+                  raw={request.requestBody}
+                  searchQuery={searchQuery}
+                  isRegexMode={isRegexMode}
+                />
+              ) : (
+                <CodeBlock
+                  content={request.requestBody}
+                  searchQuery={searchQuery}
+                  isRegexMode={isRegexMode}
+                />
+              )}
             </CollapsibleSection>
           )}
         </TabsContent>
@@ -743,10 +1039,15 @@ export function NetworkRequestDetail({
                     {' '}({Math.round((request.responseBody.length * 3) / 4 / 1024)}KB)
                   </div>
                 </div>
+              ) : looksLikeJSON(request.responseBody) ? (
+                <JsonBodyBlock
+                  raw={request.responseBody}
+                  searchQuery={searchQuery}
+                  isRegexMode={isRegexMode}
+                />
               ) : (
                 <CodeBlock
-                  content={formatJSON(request.responseBody)}
-                  language="json"
+                  content={request.responseBody}
                   searchQuery={searchQuery}
                   isRegexMode={isRegexMode}
                 />

@@ -10,13 +10,20 @@ export {
 export {
     CommandResult,
     DisplaySize,
+    HandyHTTPResponse,
+    HandyImageFile,
     HttpExtra,
+    InstallAttemptResult,
     NetworkRequest,
     PortForwardItem,
     PortForwardStatus,
+    PreparedInstallPackage,
     ProcessInfoUI,
     ProcessListResult,
     ProcessStats,
+    ShellTabInfo,
+    ShellUIState,
+    TrackLogStatus,
     WirelessDebugRequest,
     WirelessDebugResult
 } from "./models.js";

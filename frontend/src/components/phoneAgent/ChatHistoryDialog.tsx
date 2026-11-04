@@ -21,7 +21,7 @@ interface ChatHistoryDialogProps {
 function getStatusIcon(status: ChatSessionStatus) {
   switch (status) {
     case 'completed':
-      return { icon: CheckCircle2, color: 'text-green-600 dark:text-green-400', label: '已完成' }
+      return { icon: CheckCircle2, color: 'text-green-700 dark:text-green-400', label: '已完成' }
     case 'interrupted':
       return { icon: AlertTriangle, color: 'text-yellow-600 dark:text-yellow-400', label: '已中断' }
     case 'error':

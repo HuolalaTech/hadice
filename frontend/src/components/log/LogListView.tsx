@@ -5,6 +5,10 @@ import type { FilterStats } from '@/workers/log-filter.worker';
 import { useLogViewStore } from '@/store/logViewStore';
 import { Checkbox } from '@/components/ui/checkbox';
 import { copyTextToClipboard } from '@/lib/clipboard';
+import {
+  LOG_LEVEL_TEXT_CLASS,
+  normalizeLogLevel,
+} from '@/lib/log-level-style';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -25,15 +29,6 @@ interface ContextMenuState {
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
-
-const LEVEL_COLORS: Record<string, string> = {
-  F: 'text-purple-400',
-  E: 'text-red-400',
-  W: 'text-yellow-400',
-  I: 'text-blue-400',
-  D: 'text-muted-foreground',
-  V: 'text-muted-foreground/80',
-};
 
 const SORT_ICONS: Record<string, { asc: string; desc: string }> = {
   time: { asc: '▲', desc: '▼' },
@@ -77,7 +72,9 @@ export const LogListView: React.FC<LogListViewProps> = React.memo(
             break;
           case 'level': {
             const order = ['V', 'D', 'I', 'W', 'E', 'F'];
-            cmp = order.indexOf(a.level) - order.indexOf(b.level);
+            cmp =
+              order.indexOf(normalizeLogLevel(a.level)) -
+              order.indexOf(normalizeLogLevel(b.level));
             break;
           }
           case 'pid':
@@ -95,12 +92,6 @@ export const LogListView: React.FC<LogListViewProps> = React.memo(
       return sorted;
     }, [entries, sortColumn, sortDirection]);
 
-    // ── Auto-scroll to bottom in list mode ─────────────────────────────────
-
-    useEffect(() => {
-      if (!autoScroll || !scrollRef.current) return;
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }, [sortedEntries.length, autoScroll]);
     // ── Virtualizer ────────────────────────────────────────────────────────
 
     const virtualizer = useVirtualizer({
@@ -110,6 +101,17 @@ export const LogListView: React.FC<LogListViewProps> = React.memo(
       getItemKey: (index) => `${sortedEntries[index]?.timestamp ?? 0}-${index}`,
       overscan: 15,
     });
+
+    // ── Auto-scroll to bottom in list mode ─────────────────────────────────
+    // ponytail: 虚拟列表应用 scrollToIndex；scrollTop=scrollHeight 常在高度结算前失效
+    useEffect(() => {
+      if (!autoScroll || sortedEntries.length === 0) return;
+      const last = sortedEntries.length - 1;
+      const id = requestAnimationFrame(() => {
+        virtualizer.scrollToIndex(last, { align: 'end' });
+      });
+      return () => cancelAnimationFrame(id);
+    }, [sortedEntries.length, autoScroll, virtualizer]);
 
     // ── Dismiss context menu on outside click ──────────────────────────────
 
@@ -378,10 +380,11 @@ export const LogListView: React.FC<LogListViewProps> = React.memo(
                     <div
                       className={[
                         'w-[50px] shrink-0 font-mono font-bold',
-                        LEVEL_COLORS[entry.level] || 'text-muted-foreground',
+                        LOG_LEVEL_TEXT_CLASS[normalizeLogLevel(entry.level)] ||
+                          'text-muted-foreground',
                       ].join(' ')}
                     >
-                      {entry.level}
+                      {normalizeLogLevel(entry.level) || entry.level}
                     </div>
 
                     {/* PID cell (conditional) */}

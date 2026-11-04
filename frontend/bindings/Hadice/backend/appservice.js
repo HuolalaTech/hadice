@@ -16,10 +16,16 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 import * as adb$0 from "./adb/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as applayout$0 from "./applayout/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as device$0 from "./device/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as hdc$0 from "./hdc/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as installhistory$0 from "./installhistory/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as phoneAgent$0 from "./phoneAgent/models.js";
@@ -71,6 +77,33 @@ export function AdbStartServer() {
 }
 
 /**
+ * AppLayoutInspect 可选启动页面后抓取布局树 + 截图。pageName 为空则只抓当前前台。
+ * @param {string} connectKey
+ * @param {string} platform
+ * @param {string} packageName
+ * @param {string} pageName
+ * @returns {$CancellablePromise<applayout$0.DumpResult | null>}
+ */
+export function AppLayoutInspect(connectKey, platform, packageName, pageName) {
+    return $Call.ByID(2270224251, connectKey, platform, packageName, pageName).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType3($result);
+    }));
+}
+
+/**
+ * AppLayoutListPages 列出应用页面（Ability / Activity）。实验功能，随 applayout 包可整体移除。
+ * @param {string} connectKey
+ * @param {string} platform
+ * @param {string} packageName
+ * @returns {$CancellablePromise<applayout$0.PageInfo[]>}
+ */
+export function AppLayoutListPages(connectKey, platform, packageName) {
+    return $Call.ByID(4130576271, connectKey, platform, packageName).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType5($result);
+    }));
+}
+
+/**
  * CheckPortForwardStatus 检查端口转发状态
  * @param {number} localPort
  * @param {number} devicePort
@@ -78,7 +111,7 @@ export function AdbStartServer() {
  */
 export function CheckPortForwardStatus(localPort, devicePort) {
     return $Call.ByID(2160002514, localPort, devicePort).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType3($result);
+        return $$createType7($result);
     }));
 }
 
@@ -91,7 +124,7 @@ export function CheckPortForwardStatus(localPort, devicePort) {
  */
 export function CheckReversePortForwardStatus(deviceId, localPort, devicePort) {
     return $Call.ByID(1026069536, deviceId, localPort, devicePort).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType3($result);
+        return $$createType7($result);
     }));
 }
 
@@ -101,7 +134,7 @@ export function CheckReversePortForwardStatus(deviceId, localPort, devicePort) {
  */
 export function CheckServer() {
     return $Call.ByID(1646747579).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType4($result);
+        return $$createType8($result);
     }));
 }
 
@@ -115,7 +148,7 @@ export function CheckServer() {
  */
 export function CheckUpdate(updateCheckURL, currentVersion) {
     return $Call.ByID(2743055505, updateCheckURL, currentVersion).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -127,7 +160,7 @@ export function CheckUpdate(updateCheckURL, currentVersion) {
  */
 export function ClearAppCache(connectKey, packageName) {
     return $Call.ByID(4034704246, connectKey, packageName).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -139,7 +172,7 @@ export function ClearAppCache(connectKey, packageName) {
  */
 export function ClearAppData(connectKey, packageName) {
     return $Call.ByID(1343419524, connectKey, packageName).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -152,7 +185,7 @@ export function ClearAppData(connectKey, packageName) {
  */
 export function ClearAppDataByPlatform(connectKey, packageName, platform) {
     return $Call.ByID(929685238, connectKey, packageName, platform).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -162,8 +195,16 @@ export function ClearAppDataByPlatform(connectKey, packageName, platform) {
  */
 export function ClearAppDiskCache() {
     return $Call.ByID(3414197473).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
+}
+
+/**
+ * @param {string} platform
+ * @returns {$CancellablePromise<void>}
+ */
+export function ClearInstallHistory(platform) {
+    return $Call.ByID(944791400, platform);
 }
 
 /**
@@ -182,8 +223,16 @@ export function ClearRequests(deviceId) {
  */
 export function ClearScreenshotHistory(savePath) {
     return $Call.ByID(2174065827, savePath).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
+}
+
+/**
+ * ClearTrackLogs 清空已收到的埋点。
+ * @returns {$CancellablePromise<void>}
+ */
+export function ClearTrackLogs() {
+    return $Call.ByID(2348552423);
 }
 
 /**
@@ -197,7 +246,7 @@ export function ClearScreenshotHistory(savePath) {
  */
 export function Click(deviceSn, x, y) {
     return $Call.ByID(1958183776, deviceSn, x, y).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -222,7 +271,7 @@ export function ClosePanelWindow(menuId) {
  */
 export function ConfigurePortForward(deviceId, localPort, devicePort, portType) {
     return $Call.ByID(548412788, deviceId, localPort, devicePort, portType).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType3($result);
+        return $$createType7($result);
     }));
 }
 
@@ -233,7 +282,7 @@ export function ConfigurePortForward(deviceId, localPort, devicePort, portType) 
  */
 export function ConnectDevice(ipPort) {
     return $Call.ByID(3635677216, ipPort).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -244,7 +293,7 @@ export function ConnectDevice(ipPort) {
  */
 export function ConnectWirelessDebugDevice(req) {
     return $Call.ByID(2593429863, req).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType9($result);
+        return $$createType13($result);
     }));
 }
 
@@ -255,7 +304,7 @@ export function ConnectWirelessDebugDevice(req) {
  */
 export function CopyFilePathToClipboard(filePath) {
     return $Call.ByID(3874272601, filePath).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -266,7 +315,7 @@ export function CopyFilePathToClipboard(filePath) {
  */
 export function CopyImageToClipboard(filePath) {
     return $Call.ByID(2070046983, filePath).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -280,7 +329,7 @@ export function CopyImageToClipboard(filePath) {
  */
 export function CopyScreenRecordFileToTmp(connectKey, uri, originalPath, fileName) {
     return $Call.ByID(2405013632, connectKey, uri, originalPath, fileName).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -290,7 +339,7 @@ export function CopyScreenRecordFileToTmp(connectKey, uri, originalPath, fileNam
  */
 export function DebugGetServerInfo() {
     return $Call.ByID(2620625566).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -304,8 +353,17 @@ export function DebugGetServerInfo() {
  */
 export function DeleteDeviceFile(connectKey, filePath, platform) {
     return $Call.ByID(2997040191, connectKey, filePath, platform).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
+}
+
+/**
+ * @param {string} platform
+ * @param {string} historyID
+ * @returns {$CancellablePromise<void>}
+ */
+export function DeleteInstallHistory(platform, historyID) {
+    return $Call.ByID(3264984386, platform, historyID);
 }
 
 /**
@@ -315,7 +373,7 @@ export function DeleteDeviceFile(connectKey, filePath, platform) {
  */
 export function DeleteLocalFile(filePath) {
     return $Call.ByID(4229012292, filePath).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -326,7 +384,7 @@ export function DeleteLocalFile(filePath) {
  */
 export function DeleteScreenshot(filePath) {
     return $Call.ByID(405009903, filePath).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -337,7 +395,18 @@ export function DeleteScreenshot(filePath) {
  */
 export function DisconnectDevice(ipPort) {
     return $Call.ByID(3846116260, ipPort).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
+    }));
+}
+
+/**
+ * @param {string} rawURL
+ * @param {string} platform
+ * @returns {$CancellablePromise<$models.PreparedInstallPackage | null>}
+ */
+export function DownloadInstallPackage(rawURL, platform) {
+    return $Call.ByID(2171207049, rawURL, platform).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType15($result);
     }));
 }
 
@@ -351,7 +420,7 @@ export function DisconnectDevice(ipPort) {
  */
 export function DownloadScreenRecordFile(connectKey, devicePath, savePath, fileName) {
     return $Call.ByID(1821165999, connectKey, devicePath, savePath, fileName).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -362,7 +431,7 @@ export function DownloadScreenRecordFile(connectKey, devicePath, savePath, fileN
  */
 export function ExecuteAdb(args) {
     return $Call.ByID(1982736592, args).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType11($result);
+        return $$createType17($result);
     }));
 }
 
@@ -373,7 +442,7 @@ export function ExecuteAdb(args) {
  */
 export function ExecuteHdc(args) {
     return $Call.ByID(982964504, args).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -384,7 +453,7 @@ export function ExecuteHdc(args) {
  */
 export function ExecuteHdcCommand(connectKey, shellCommand) {
     return $Call.ByID(3621870993, connectKey, shellCommand).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -401,7 +470,20 @@ export function ExecuteHdcCommand(connectKey, shellCommand) {
  */
 export function ExecutePhoneAgentStep(sessionID, task, isFirst) {
     return $Call.ByID(970708516, sessionID, task, isFirst).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
+    }));
+}
+
+/**
+ * ExportAppByPlatform 导出应用安装包到本机（安卓 APK / 鸿蒙 HAP）
+ * @param {string} connectKey
+ * @param {string} packageName
+ * @param {string} platform
+ * @returns {$CancellablePromise<{ [_ in string]?: any }>}
+ */
+export function ExportAppByPlatform(connectKey, packageName, platform) {
+    return $Call.ByID(2144934567, connectKey, packageName, platform).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType9($result);
     }));
 }
 
@@ -415,13 +497,21 @@ export function ExtractVideoFirstFrame(videoPath) {
 }
 
 /**
+ * FocusWebPeekContent 聚焦内容窗。
+ * @returns {$CancellablePromise<void>}
+ */
+export function FocusWebPeekContent() {
+    return $Call.ByID(1506842534);
+}
+
+/**
  * @param {string} connectKey
  * @param {string} packageName
  * @returns {$CancellablePromise<hdc$0.HdcResult | null>}
  */
 export function ForceStopApp(connectKey, packageName) {
     return $Call.ByID(4159700774, connectKey, packageName).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -433,7 +523,7 @@ export function ForceStopApp(connectKey, packageName) {
  */
 export function ForceStopAppByPlatform(connectKey, packageName, platform) {
     return $Call.ByID(3787202544, connectKey, packageName, platform).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType13($result);
+        return $$createType19($result);
     }));
 }
 
@@ -443,7 +533,7 @@ export function ForceStopAppByPlatform(connectKey, packageName, platform) {
  */
 export function GetAdbDebugInfo() {
     return $Call.ByID(2203242744).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType4($result);
+        return $$createType8($result);
     }));
 }
 
@@ -462,7 +552,7 @@ export function GetAdbVersion() {
  */
 export function GetAndroidAppList(connectKey) {
     return $Call.ByID(1109081986, connectKey).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType15($result);
+        return $$createType21($result);
     }));
 }
 
@@ -474,7 +564,7 @@ export function GetAndroidAppList(connectKey) {
  */
 export function GetAndroidCaptureStatus(deviceId, packageName) {
     return $Call.ByID(912525005, deviceId, packageName).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -485,7 +575,7 @@ export function GetAndroidCaptureStatus(deviceId, packageName) {
  */
 export function GetAndroidDebuggableApps(deviceId) {
     return $Call.ByID(2343163503, deviceId).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType16($result);
+        return $$createType22($result);
     }));
 }
 
@@ -495,7 +585,7 @@ export function GetAndroidDebuggableApps(deviceId) {
  */
 export function GetAndroidDeviceList() {
     return $Call.ByID(2610377813).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType16($result);
+        return $$createType22($result);
     }));
 }
 
@@ -518,7 +608,7 @@ export function GetAndroidPidByPackageName(deviceId, packageName) {
  */
 export function GetAppFullDetail(connectKey, packageName) {
     return $Call.ByID(846714931, connectKey, packageName).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -532,7 +622,7 @@ export function GetAppFullDetail(connectKey, packageName) {
  */
 export function GetAppList(connectKey, filter, incremental) {
     return $Call.ByID(3478131247, connectKey, filter, incremental).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType18($result);
+        return $$createType24($result);
     }));
 }
 
@@ -546,7 +636,7 @@ export function GetAppList(connectKey, filter, incremental) {
  */
 export function GetAppListByPlatform(connectKey, filter, incremental, platform) {
     return $Call.ByID(334570385, connectKey, filter, incremental, platform).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType18($result);
+        return $$createType24($result);
     }));
 }
 
@@ -557,7 +647,7 @@ export function GetAppListByPlatform(connectKey, filter, incremental, platform) 
  */
 export function GetAppRunningRecords(connectKey) {
     return $Call.ByID(3295243168, connectKey).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType16($result);
+        return $$createType22($result);
     }));
 }
 
@@ -569,7 +659,7 @@ export function GetAppRunningRecords(connectKey) {
  */
 export function GetAppShortcuts(connectKey, packageName) {
     return $Call.ByID(1720030354, connectKey, packageName).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType16($result);
+        return $$createType22($result);
     }));
 }
 
@@ -588,7 +678,7 @@ export function GetAppVersion() {
  */
 export function GetBatteryInfo(connectKey) {
     return $Call.ByID(3923413513, connectKey).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType20($result);
+        return $$createType26($result);
     }));
 }
 
@@ -600,7 +690,7 @@ export function GetBatteryInfo(connectKey) {
  */
 export function GetBatteryInfoByPlatform(connectKey, platform) {
     return $Call.ByID(2358788339, connectKey, platform).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType22($result);
+        return $$createType28($result);
     }));
 }
 
@@ -619,7 +709,7 @@ export function GetCachedAppIcon(packageName) {
  */
 export function GetCachedAppList() {
     return $Call.ByID(1702823729).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -630,7 +720,7 @@ export function GetCachedAppList() {
  */
 export function GetCaptureServerStatus(deviceId) {
     return $Call.ByID(2611581395, deviceId).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -641,7 +731,7 @@ export function GetCaptureServerStatus(deviceId) {
  */
 export function GetCaptureStatus(deviceId) {
     return $Call.ByID(771041176, deviceId).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -652,7 +742,7 @@ export function GetCaptureStatus(deviceId) {
  */
 export function GetCpuDetailInfo(connectKey) {
     return $Call.ByID(627764747, connectKey).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType24($result);
+        return $$createType30($result);
     }));
 }
 
@@ -663,7 +753,7 @@ export function GetCpuDetailInfo(connectKey) {
  */
 export function GetCpuFreqInfo(connectKey) {
     return $Call.ByID(27464412, connectKey).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType26($result);
+        return $$createType32($result);
     }));
 }
 
@@ -674,7 +764,7 @@ export function GetCpuFreqInfo(connectKey) {
  */
 export function GetCpuUsageInfo(connectKey) {
     return $Call.ByID(3834672033, connectKey).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType28($result);
+        return $$createType34($result);
     }));
 }
 
@@ -686,7 +776,7 @@ export function GetCpuUsageInfo(connectKey) {
  */
 export function GetCpuUsageInfoByPlatform(connectKey, platform) {
     return $Call.ByID(4036085131, connectKey, platform).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType30($result);
+        return $$createType36($result);
     }));
 }
 
@@ -705,7 +795,7 @@ export function GetDefaultScreenshotPath() {
  */
 export function GetDeviceDetailInfo(connectKey) {
     return $Call.ByID(783956267, connectKey).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType32($result);
+        return $$createType38($result);
     }));
 }
 
@@ -717,7 +807,7 @@ export function GetDeviceDetailInfo(connectKey) {
  */
 export function GetDeviceDetailInfoByPlatform(connectKey, platform) {
     return $Call.ByID(144683701, connectKey, platform).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType34($result);
+        return $$createType40($result);
     }));
 }
 
@@ -728,7 +818,7 @@ export function GetDeviceDetailInfoByPlatform(connectKey, platform) {
  */
 export function GetDeviceInfo(connectKey) {
     return $Call.ByID(316556094, connectKey).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType36($result);
+        return $$createType42($result);
     }));
 }
 
@@ -768,7 +858,7 @@ export function GetDeviceUdidByPlatform(connectKey, platform) {
  */
 export function GetDisplaySize(deviceSn) {
     return $Call.ByID(2024825347, deviceSn).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType38($result);
+        return $$createType44($result);
     }));
 }
 
@@ -791,7 +881,7 @@ export function GetFaultLogDetail(connectKey, recordId) {
  */
 export function GetFaultLogList(connectKey, processName, n) {
     return $Call.ByID(3017542990, connectKey, processName, n).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType40($result);
+        return $$createType46($result);
     }));
 }
 
@@ -802,7 +892,7 @@ export function GetFaultLogList(connectKey, processName, n) {
  */
 export function GetFileInfo(filePath) {
     return $Call.ByID(3398976314, filePath).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -813,7 +903,7 @@ export function GetFileInfo(filePath) {
  */
 export function GetGraphicsInfo(connectKey) {
     return $Call.ByID(3639539489, connectKey).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType42($result);
+        return $$createType48($result);
     }));
 }
 
@@ -825,7 +915,7 @@ export function GetGraphicsInfo(connectKey) {
  */
 export function GetGraphicsInfoWithPid(connectKey, pid) {
     return $Call.ByID(3279553938, connectKey, pid).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType42($result);
+        return $$createType48($result);
     }));
 }
 
@@ -844,7 +934,7 @@ export function GetHadiceOutputDirectory(subdir) {
  */
 export function GetHdcDebugInfo() {
     return $Call.ByID(389238872).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType4($result);
+        return $$createType8($result);
     }));
 }
 
@@ -863,7 +953,7 @@ export function GetHdcVersion() {
  */
 export function GetHiProfilerApps(deviceId) {
     return $Call.ByID(13879218, deviceId).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType16($result);
+        return $$createType22($result);
     }));
 }
 
@@ -874,7 +964,7 @@ export function GetHiProfilerApps(deviceId) {
  */
 export function GetHiProfilerCaptureStatus(deviceId) {
     return $Call.ByID(314301030, deviceId).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -886,7 +976,17 @@ export function GetHiProfilerCaptureStatus(deviceId) {
  */
 export function GetHiProfilerProcessStatus(deviceId, processName) {
     return $Call.ByID(57341189, deviceId, processName).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
+    }));
+}
+
+/**
+ * @param {string} platform
+ * @returns {$CancellablePromise<installhistory$0.Item[]>}
+ */
+export function GetInstallHistory(platform) {
+    return $Call.ByID(3115160177, platform).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType50($result);
     }));
 }
 
@@ -898,7 +998,7 @@ export function GetHiProfilerProcessStatus(deviceId, processName) {
  */
 export function GetIpcStat(connectKey, pid) {
     return $Call.ByID(313627256, connectKey, pid).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType44($result);
+        return $$createType52($result);
     }));
 }
 
@@ -917,7 +1017,7 @@ export function GetLogFilePath() {
  */
 export function GetMemoryDetailInfo(connectKey) {
     return $Call.ByID(374635846, connectKey).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType46($result);
+        return $$createType54($result);
     }));
 }
 
@@ -928,7 +1028,7 @@ export function GetMemoryDetailInfo(connectKey) {
  */
 export function GetMemoryInfo(connectKey) {
     return $Call.ByID(885930963, connectKey).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType48($result);
+        return $$createType56($result);
     }));
 }
 
@@ -940,7 +1040,7 @@ export function GetMemoryInfo(connectKey) {
  */
 export function GetMemoryInfoByPlatform(connectKey, platform) {
     return $Call.ByID(1274214269, connectKey, platform).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType50($result);
+        return $$createType58($result);
     }));
 }
 
@@ -951,7 +1051,7 @@ export function GetMemoryInfoByPlatform(connectKey, platform) {
  */
 export function GetMissionList(connectKey) {
     return $Call.ByID(1849604014, connectKey).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType16($result);
+        return $$createType22($result);
     }));
 }
 
@@ -962,7 +1062,7 @@ export function GetMissionList(connectKey) {
  */
 export function GetNetworkInfo(connectKey) {
     return $Call.ByID(1680508690, connectKey).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType52($result);
+        return $$createType60($result);
     }));
 }
 
@@ -974,7 +1074,7 @@ export function GetNetworkInfo(connectKey) {
  */
 export function GetNetworkInfoByPlatform(connectKey, platform) {
     return $Call.ByID(3234409044, connectKey, platform).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType54($result);
+        return $$createType62($result);
     }));
 }
 
@@ -985,7 +1085,7 @@ export function GetNetworkInfoByPlatform(connectKey, platform) {
  */
 export function GetNetworkTrafficInfo(connectKey) {
     return $Call.ByID(1827983987, connectKey).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType56($result);
+        return $$createType64($result);
     }));
 }
 
@@ -996,7 +1096,7 @@ export function GetNetworkTrafficInfo(connectKey) {
  */
 export function GetOnlineAppInfo(packageName) {
     return $Call.ByID(81609154, packageName).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType58($result);
+        return $$createType66($result);
     }));
 }
 
@@ -1008,7 +1108,7 @@ export function GetOnlineAppInfo(packageName) {
  */
 export function GetPhoneAgentStatus(sessionID) {
     return $Call.ByID(3882824243, sessionID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -1020,7 +1120,7 @@ export function GetPhoneAgentStatus(sessionID) {
  */
 export function GetProcessCpuUsage(connectKey, pid) {
     return $Call.ByID(3429512544, connectKey, pid).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType60($result);
+        return $$createType68($result);
     }));
 }
 
@@ -1031,7 +1131,7 @@ export function GetProcessCpuUsage(connectKey, pid) {
  */
 export function GetProcessDetail(connectKey, pid) {
     return $Call.ByID(2760150488, connectKey, pid).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType4($result);
+        return $$createType8($result);
     }));
 }
 
@@ -1043,7 +1143,7 @@ export function GetProcessDetail(connectKey, pid) {
  */
 export function GetProcessDetailByPlatform(connectKey, pid, platform) {
     return $Call.ByID(4181755554, connectKey, pid, platform).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType4($result);
+        return $$createType8($result);
     }));
 }
 
@@ -1055,7 +1155,7 @@ export function GetProcessDetailByPlatform(connectKey, pid, platform) {
  */
 export function GetProcessIOInfo(connectKey, pid) {
     return $Call.ByID(3916805869, connectKey, pid).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType62($result);
+        return $$createType70($result);
     }));
 }
 
@@ -1066,7 +1166,7 @@ export function GetProcessIOInfo(connectKey, pid) {
  */
 export function GetProcessList(connectKey, sortBy) {
     return $Call.ByID(3730783157, connectKey, sortBy).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType64($result);
+        return $$createType72($result);
     }));
 }
 
@@ -1097,7 +1197,7 @@ export function GetProcessListAsyncByPlatform(connectKey, sortBy, platform) {
  */
 export function GetProcessListByPlatform(connectKey, sortBy, platform) {
     return $Call.ByID(3620183799, connectKey, sortBy, platform).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType64($result);
+        return $$createType72($result);
     }));
 }
 
@@ -1109,7 +1209,7 @@ export function GetProcessListByPlatform(connectKey, sortBy, platform) {
  */
 export function GetProcessMemoryDetail(connectKey, pid) {
     return $Call.ByID(2259922387, connectKey, pid).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType66($result);
+        return $$createType74($result);
     }));
 }
 
@@ -1121,7 +1221,7 @@ export function GetProcessMemoryDetail(connectKey, pid) {
  */
 export function GetRequests(deviceId, limit) {
     return $Call.ByID(197645306, deviceId, limit).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType68($result);
+        return $$createType76($result);
     }));
 }
 
@@ -1132,7 +1232,7 @@ export function GetRequests(deviceId, limit) {
  */
 export function GetScreenRecordHistory(savePath) {
     return $Call.ByID(3906504351, savePath).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType16($result);
+        return $$createType22($result);
     }));
 }
 
@@ -1143,7 +1243,43 @@ export function GetScreenRecordHistory(savePath) {
  */
 export function GetScreenshotHistory(savePath) {
     return $Call.ByID(1567488824, savePath).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType16($result);
+        return $$createType22($result);
+    }));
+}
+
+/**
+ * GetSelectedConnectKey 返回当前跨窗共享的选中设备 connectKey。
+ * @returns {$CancellablePromise<string>}
+ */
+export function GetSelectedConnectKey() {
+    return $Call.ByID(2395755768);
+}
+
+/**
+ * GetShellScrollback 返回会话近期输出，供窗口切换后回放历史。
+ * @param {string} shellId
+ * @returns {$CancellablePromise<string>}
+ */
+export function GetShellScrollback(shellId) {
+    return $Call.ByID(2475765696, shellId);
+}
+
+/**
+ * GetShellSnapshot 读取某一会话的 xterm 序列化快照。
+ * @param {string} shellId
+ * @returns {$CancellablePromise<string>}
+ */
+export function GetShellSnapshot(shellId) {
+    return $Call.ByID(79619706, shellId);
+}
+
+/**
+ * GetShellUIState 返回跨窗口共享的终端 tabs / 快照。
+ * @returns {$CancellablePromise<$models.ShellUIState>}
+ */
+export function GetShellUIState() {
+    return $Call.ByID(1731482517).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType77($result);
     }));
 }
 
@@ -1154,7 +1290,7 @@ export function GetScreenshotHistory(savePath) {
  */
 export function GetStorageInfo(connectKey) {
     return $Call.ByID(924530493, connectKey).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType70($result);
+        return $$createType79($result);
     }));
 }
 
@@ -1166,7 +1302,7 @@ export function GetStorageInfo(connectKey) {
  */
 export function GetStorageInfoByPlatform(connectKey, platform) {
     return $Call.ByID(2730517375, connectKey, platform).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType72($result);
+        return $$createType81($result);
     }));
 }
 
@@ -1177,7 +1313,7 @@ export function GetStorageInfoByPlatform(connectKey, platform) {
  */
 export function GetSystemProperties(connectKey) {
     return $Call.ByID(309410276, connectKey).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType73($result);
+        return $$createType82($result);
     }));
 }
 
@@ -1189,7 +1325,7 @@ export function GetSystemProperties(connectKey) {
  */
 export function GetSystemPropertiesByPlatform(connectKey, platform) {
     return $Call.ByID(2364272342, connectKey, platform).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType74($result);
+        return $$createType83($result);
     }));
 }
 
@@ -1200,7 +1336,7 @@ export function GetSystemPropertiesByPlatform(connectKey, platform) {
  */
 export function GetSystemRuntime(connectKey) {
     return $Call.ByID(125130451, connectKey).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType76($result);
+        return $$createType85($result);
     }));
 }
 
@@ -1212,7 +1348,17 @@ export function GetSystemRuntime(connectKey) {
  */
 export function GetSystemRuntimeByPlatform(connectKey, platform) {
     return $Call.ByID(1248488061, connectKey, platform).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType78($result);
+        return $$createType87($result);
+    }));
+}
+
+/**
+ * GetTrackLogStatus 当前监听状态；副作用：推一次全量快照给前端对齐。
+ * @returns {$CancellablePromise<$models.TrackLogStatus | null>}
+ */
+export function GetTrackLogStatus() {
+    return $Call.ByID(631454573).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType89($result);
     }));
 }
 
@@ -1223,7 +1369,7 @@ export function GetSystemRuntimeByPlatform(connectKey, platform) {
  */
 export function GetUptimeInfo(connectKey) {
     return $Call.ByID(3025861228, connectKey).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -1261,7 +1407,45 @@ export function Greet(name) {
 }
 
 /**
- * InstallApp 安装应用，支持ZIP和GZIP压缩包
+ * HandyReadImageFile 读取拖放得到的文件路径（配合 data-wails-dropzone 的 files-dropped 事件）
+ * @param {string} path
+ * @returns {$CancellablePromise<$models.HandyImageFile | null>}
+ */
+export function HandyReadImageFile(path) {
+    return $Call.ByID(3971887335, path).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType91($result);
+    }));
+}
+
+/**
+ * HandySelectImageFile 原生选图对话框（Wails WebView 不支持 <input type=file> 点击选文件）
+ * 取消选择返回 nil,nil；文件以 DataURL 返回供前端 Canvas/预览直接使用。
+ * ponytail: 限 20MB，够二维码/转 Base64；大图需流式时再改落盘路径模式。
+ * @returns {$CancellablePromise<$models.HandyImageFile | null>}
+ */
+export function HandySelectImageFile() {
+    return $Call.ByID(183277619).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType91($result);
+    }));
+}
+
+/**
+ * HandySendHTTPRequest 纯转发：仅 http/https，30s 超时。
+ * ponytail: 响应体截断 2MB，够调试接口；需大响应/流式时再改分片。
+ * @param {string} method
+ * @param {string} url
+ * @param {string} headersJSON
+ * @param {string} reqBody
+ * @returns {$CancellablePromise<$models.HandyHTTPResponse | null>}
+ */
+export function HandySendHTTPRequest(method, url, headersJSON, reqBody) {
+    return $Call.ByID(2557667723, method, url, headersJSON, reqBody).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType93($result);
+    }));
+}
+
+/**
+ * InstallApp 安装应用，支持 ZIP/GZIP/TAR 压缩包（解压后找 apk/hap）
  * @param {string} connectKey
  * @param {string} filePath
  * @param {boolean} replace
@@ -1270,7 +1454,20 @@ export function Greet(name) {
  */
 export function InstallApp(connectKey, filePath, replace, sharedBundle) {
     return $Call.ByID(1123486846, connectKey, filePath, replace, sharedBundle).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
+    }));
+}
+
+/**
+ * @param {string} connectKey
+ * @param {string} filePath
+ * @param {string} sourceType
+ * @param {string} source
+ * @returns {$CancellablePromise<$models.InstallAttemptResult | null>}
+ */
+export function InstallAppWithHistory(connectKey, filePath, sourceType, source) {
+    return $Call.ByID(1187955690, connectKey, filePath, sourceType, source).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType95($result);
     }));
 }
 
@@ -1302,6 +1499,23 @@ export function IsPanelWindowOpen(menuId) {
 }
 
 /**
+ * IsShellRunning 判断会话是否仍在后端存活。
+ * @param {string} shellId
+ * @returns {$CancellablePromise<boolean>}
+ */
+export function IsShellRunning(shellId) {
+    return $Call.ByID(1769295633, shellId);
+}
+
+/**
+ * IsWebPeekToolbarCollapsed 工具条是否收缩。
+ * @returns {$CancellablePromise<boolean>}
+ */
+export function IsWebPeekToolbarCollapsed() {
+    return $Call.ByID(1255452997);
+}
+
+/**
  * @param {string} connectKey
  * @param {number} pid
  * @param {boolean} force
@@ -1309,7 +1523,7 @@ export function IsPanelWindowOpen(menuId) {
  */
 export function KillProcess(connectKey, pid, force) {
     return $Call.ByID(3123128197, connectKey, pid, force).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -1322,7 +1536,7 @@ export function KillProcess(connectKey, pid, force) {
  */
 export function KillProcessByPlatform(connectKey, pid, force, platform) {
     return $Call.ByID(2296614663, connectKey, pid, force, platform).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType13($result);
+        return $$createType19($result);
     }));
 }
 
@@ -1332,7 +1546,7 @@ export function KillProcessByPlatform(connectKey, pid, force, platform) {
  */
 export function KillServer() {
     return $Call.ByID(4190151411).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -1343,7 +1557,7 @@ export function KillServer() {
  */
 export function ListAdbDevices(verbose) {
     return $Call.ByID(156566624, verbose).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType80($result);
+        return $$createType97($result);
     }));
 }
 
@@ -1354,7 +1568,7 @@ export function ListAdbDevices(verbose) {
  */
 export function ListAllDevices(verbose) {
     return $Call.ByID(2967398830, verbose).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType80($result);
+        return $$createType97($result);
     }));
 }
 
@@ -1367,7 +1581,7 @@ export function ListAllDevices(verbose) {
  */
 export function ListAndroidWebViews(deviceId, pid, packageName) {
     return $Call.ByID(1958675795, deviceId, pid, packageName).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType82($result);
+        return $$createType99($result);
     }));
 }
 
@@ -1381,7 +1595,7 @@ export function ListAndroidWebViews(deviceId, pid, packageName) {
  */
 export function ListDeviceDirectory(connectKey, path, platform) {
     return $Call.ByID(1358629017, connectKey, path, platform).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -1392,7 +1606,7 @@ export function ListDeviceDirectory(connectKey, path, platform) {
  */
 export function ListDevices(verbose) {
     return $Call.ByID(700490603, verbose).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType84($result);
+        return $$createType101($result);
     }));
 }
 
@@ -1402,7 +1616,7 @@ export function ListDevices(verbose) {
  */
 export function ListDevicesWithInfo() {
     return $Call.ByID(1754884039).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType84($result);
+        return $$createType101($result);
     }));
 }
 
@@ -1415,7 +1629,7 @@ export function ListDevicesWithInfo() {
  */
 export function ListHarmonyWebViews(deviceId, pid, bundleName) {
     return $Call.ByID(1606387382, deviceId, pid, bundleName).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType86($result);
+        return $$createType103($result);
     }));
 }
 
@@ -1426,7 +1640,7 @@ export function ListHarmonyWebViews(deviceId, pid, bundleName) {
  */
 export function ListLocalDirectory(path) {
     return $Call.ByID(1769856554, path).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -1436,8 +1650,18 @@ export function ListLocalDirectory(path) {
  */
 export function ListPortForwards() {
     return $Call.ByID(2913808025).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType88($result);
+        return $$createType105($result);
     }));
+}
+
+/**
+ * MoveWebPeekToolbarBy 小圆钮拖动：相对位移（屏幕像素），并记为用户放置。
+ * @param {number} dx
+ * @param {number} dy
+ * @returns {$CancellablePromise<void>}
+ */
+export function MoveWebPeekToolbarBy(dx, dy) {
+    return $Call.ByID(84700528, dx, dy);
 }
 
 /**
@@ -1456,7 +1680,7 @@ export function OpenBrowser(url) {
  */
 export function OpenFileInSystem(filePath) {
     return $Call.ByID(1173626248, filePath).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -1467,7 +1691,7 @@ export function OpenFileInSystem(filePath) {
  */
 export function OpenFolder(folderPath) {
     return $Call.ByID(1922245396, folderPath).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -1478,15 +1702,13 @@ export function OpenFolder(folderPath) {
  */
 export function OpenLogFile(filePath) {
     return $Call.ByID(3708622932, filePath).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
 /**
- * OpenPanelWindow 在独立窗口中打开指定菜单页
- * menuId: 菜单 ID（如 device-overview）
- * title: 窗口标题
- * 若该菜单的独立窗口已存在，则聚焦显示；否则创建新窗口
+ * OpenPanelWindow 在独立窗口中打开指定菜单页（2 参兼容；设备取后端 selectedConnectKey）
+ * 新代码请用 OpenPanelWindowWithDevice，避免 selectedConnectKey 未写入时独立窗落到第一台安卓。
  * @param {string} menuId
  * @param {string} title
  * @returns {$CancellablePromise<boolean>}
@@ -1496,13 +1718,25 @@ export function OpenPanelWindow(menuId, title) {
 }
 
 /**
+ * OpenPanelWindowWithDevice 打开独立窗并强制继承 deviceKey（写入 URL + 后端）。
+ * 单独方法名，避免改 OpenPanelWindow 参数个数导致热更 arity 炸窗。
+ * @param {string} menuId
+ * @param {string} title
+ * @param {string} deviceKey
+ * @returns {$CancellablePromise<boolean>}
+ */
+export function OpenPanelWindowWithDevice(menuId, title, deviceKey) {
+    return $Call.ByID(4027589456, menuId, title, deviceKey);
+}
+
+/**
  * OpenScreenshotFile 在文件管理器中打开截图文件并定位
  * @param {string} filePath
  * @returns {$CancellablePromise<hdc$0.HdcResult | null>}
  */
 export function OpenScreenshotFile(filePath) {
     return $Call.ByID(228531874, filePath).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -1513,18 +1747,44 @@ export function OpenScreenshotFile(filePath) {
  */
 export function OpenScreenshotFolder(savePath) {
     return $Call.ByID(3244782592, savePath).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
 /**
- * ParseAppPackageInfo 解析安装包信息（支持 HAP/APK 格式）
+ * OpenWebPeekDevTools 打开内容窗 Web Inspector。
+ * @returns {$CancellablePromise<void>}
+ */
+export function OpenWebPeekDevTools() {
+    return $Call.ByID(133458339);
+}
+
+/**
+ * OpenWebPeekFullWindow 仅打开/刷新内容窗（默认桌面尺寸），并重新停靠工具条。
+ * @param {string} rawURL
+ * @returns {$CancellablePromise<void>}
+ */
+export function OpenWebPeekFullWindow(rawURL) {
+    return $Call.ByID(633228708, rawURL);
+}
+
+/**
+ * OpenWebPeekWindow 打开内容窗（真导航）+ 悬浮可收缩工具条（贴内容窗顶部）。
+ * @param {string} rawURL
+ * @returns {$CancellablePromise<void>}
+ */
+export function OpenWebPeekWindow(rawURL) {
+    return $Call.ByID(530999121, rawURL);
+}
+
+/**
+ * ParseAppPackageInfo 解析安装包信息（支持 HAP/APK 及压缩包）
  * @param {string} filePath
  * @returns {$CancellablePromise<hdc$0.InstallPackageInfo | null>}
  */
 export function ParseAppPackageInfo(filePath) {
     return $Call.ByID(389740578, filePath).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType90($result);
+        return $$createType107($result);
     }));
 }
 
@@ -1536,7 +1796,7 @@ export function ParseAppPackageInfo(filePath) {
  */
 export function ParseHapAppInfo(filePath) {
     return $Call.ByID(2383677915, filePath).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType90($result);
+        return $$createType107($result);
     }));
 }
 
@@ -1546,7 +1806,7 @@ export function ParseHapAppInfo(filePath) {
  */
 export function PressBack(deviceSn) {
     return $Call.ByID(1466384008, deviceSn).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -1556,7 +1816,7 @@ export function PressBack(deviceSn) {
  */
 export function PressHome(deviceSn) {
     return $Call.ByID(929152932, deviceSn).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -1567,7 +1827,7 @@ export function PressHome(deviceSn) {
  */
 export function PressKey(deviceSn, keyCode) {
     return $Call.ByID(3782947414, deviceSn, keyCode).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -1582,7 +1842,7 @@ export function PressKey(deviceSn, keyCode) {
  */
 export function PullFileFromDevice(connectKey, remotePath, localPath, platform) {
     return $Call.ByID(232583903, connectKey, remotePath, localPath, platform).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -1608,7 +1868,7 @@ export function PushAndroidMockConfigToClient(deviceId, packageName, configJson)
  */
 export function PushFileToDevice(connectKey, localPath, remotePath, platform) {
     return $Call.ByID(3346153765, connectKey, localPath, remotePath, platform).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -1632,7 +1892,7 @@ export function PushMockConfigToClient(deviceId, configJson) {
  */
 export function QueryScreenRecordFile(connectKey, fileName, maxWaitTime, checkInterval) {
     return $Call.ByID(2837447451, connectKey, fileName, maxWaitTime, checkInterval).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -1646,6 +1906,17 @@ export function ReadImageAsBase64(filePath) {
 }
 
 /**
+ * @param {string} connectKey
+ * @param {string} historyID
+ * @returns {$CancellablePromise<$models.InstallAttemptResult | null>}
+ */
+export function ReinstallAppFromHistory(connectKey, historyID) {
+    return $Call.ByID(1541978325, connectKey, historyID).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType95($result);
+    }));
+}
+
+/**
  * RemovePortForward 删除端口转发
  * @param {number} localPort
  * @param {number} devicePort
@@ -1653,7 +1924,7 @@ export function ReadImageAsBase64(filePath) {
  */
 export function RemovePortForward(localPort, devicePort) {
     return $Call.ByID(759391216, localPort, devicePort).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -1674,8 +1945,17 @@ export function ResizeShell(shellId, cols, rows) {
  */
 export function RestartServer() {
     return $Call.ByID(3895595584).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
+}
+
+/**
+ * RestartShell 强制结束并重建会话（对应 UI「重启终端」）。
+ * @param {string} shellId
+ * @returns {$CancellablePromise<boolean>}
+ */
+export function RestartShell(shellId) {
+    return $Call.ByID(774454519, shellId);
 }
 
 /**
@@ -1685,7 +1965,7 @@ export function RestartServer() {
  */
 export function SaveLogsToFile(content, defaultFileName) {
     return $Call.ByID(807255669, content, defaultFileName).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -1715,7 +1995,7 @@ export function SaveTextFile(filename, content) {
  */
 export function Scroll(deviceSn, x, y, hscroll, vscroll) {
     return $Call.ByID(4203914505, deviceSn, x, y, hscroll, vscroll).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -1747,6 +2027,53 @@ export function SetPosthogDistinctId(id) {
 }
 
 /**
+ * SetSelectedConnectKey 由主窗选择设备时写入；独立窗打开时读入 URL。
+ * @param {string} key
+ * @returns {$CancellablePromise<void>}
+ */
+export function SetSelectedConnectKey(key) {
+    return $Call.ByID(4000914460, key);
+}
+
+/**
+ * SetShellSnapshot 单独更新某一会话的 xterm 序列化快照。
+ * @param {string} shellId
+ * @param {string} snapshot
+ * @returns {$CancellablePromise<void>}
+ */
+export function SetShellSnapshot(shellId, snapshot) {
+    return $Call.ByID(3665571862, shellId, snapshot);
+}
+
+/**
+ * SetShellUIState 由即将卸下的窗口写入，供另一窗口附着恢复。
+ * @param {$models.ShellUIState} state
+ * @returns {$CancellablePromise<void>}
+ */
+export function SetShellUIState(state) {
+    return $Call.ByID(3074127873, state);
+}
+
+/**
+ * SetWebPeekContentSize 调整内容窗尺寸（桌面传 width/height<=0 则恢复 1280×900）。
+ * @param {number} width
+ * @param {number} height
+ * @returns {$CancellablePromise<void>}
+ */
+export function SetWebPeekContentSize(width, height) {
+    return $Call.ByID(3036557871, width, height);
+}
+
+/**
+ * SetWebPeekToolbarCollapsed 收缩/展开悬浮工具条。
+ * @param {boolean} collapsed
+ * @returns {$CancellablePromise<void>}
+ */
+export function SetWebPeekToolbarCollapsed(collapsed) {
+    return $Call.ByID(731589773, collapsed);
+}
+
+/**
  * StartAndroidNetworkCapture 启动 Android 网络抓包
  * @param {string} deviceId
  * @param {string} packageName
@@ -1766,7 +2093,7 @@ export function StartAndroidNetworkCapture(deviceId, packageName, pid, localPort
  */
 export function StartApp(connectKey, packageName) {
     return $Call.ByID(1161678279, connectKey, packageName).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -1779,7 +2106,7 @@ export function StartApp(connectKey, packageName) {
  */
 export function StartAppByPlatform(connectKey, packageName, platform) {
     return $Call.ByID(4046798281, connectKey, packageName, platform).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -1792,7 +2119,7 @@ export function StartAppByPlatform(connectKey, packageName, platform) {
  */
 export function StartCapture(deviceId, localPort, devicePort) {
     return $Call.ByID(317097558, deviceId, localPort, devicePort).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -1805,7 +2132,7 @@ export function StartCapture(deviceId, localPort, devicePort) {
  */
 export function StartCaptureServer(deviceId, localPort, devicePort) {
     return $Call.ByID(1030863057, deviceId, localPort, devicePort).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -1828,7 +2155,7 @@ export function StartHiProfilerCapture(deviceId, pid, bundleName, processName) {
  */
 export function StartHilogStream(connectKey, options) {
     return $Call.ByID(2641361047, connectKey, options).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -1850,7 +2177,7 @@ export function StartIpcStat(connectKey, pid) {
  */
 export function StartLogStream(connectKey, platform, options) {
     return $Call.ByID(3434582134, connectKey, platform, options).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -1861,7 +2188,7 @@ export function StartLogStream(connectKey, platform, options) {
  */
 export function StartLogcatStream(deviceId, options) {
     return $Call.ByID(3828877810, deviceId, options).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType11($result);
+        return $$createType17($result);
     }));
 }
 
@@ -1874,7 +2201,7 @@ export function StartLogcatStream(deviceId, options) {
  */
 export function StartPhoneAgent(config) {
     return $Call.ByID(1248407409, config).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -1890,7 +2217,7 @@ export function StartPhoneAgent(config) {
  */
 export function StartScreenMirror(deviceSn, scale) {
     return $Call.ByID(3859390787, deviceSn, scale).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -1901,7 +2228,7 @@ export function StartScreenMirror(deviceSn, scale) {
  */
 export function StartScreenRecord(connectKey) {
     return $Call.ByID(199315045, connectKey).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -1911,17 +2238,31 @@ export function StartScreenRecord(connectKey) {
  */
 export function StartServer() {
     return $Call.ByID(89399095).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
 /**
  * StartShell starts a local command shell.
+ * 若同 ID 已在跑，直接附着（不重建），便于主窗 / 独立窗切换复用会话。
  * @param {string} shellId
  * @returns {$CancellablePromise<boolean>}
  */
 export function StartShell(shellId) {
     return $Call.ByID(3956221126, shellId);
+}
+
+/**
+ * StartTrackLogServer 启动本机 /ws/log，并独占绑定 deviceId 的端口反转。
+ * port<=0 时用默认 8888；已在监听时再次调用：忽略新 port，仅换绑/保活转发。
+ * @param {string} deviceId
+ * @param {number} port
+ * @returns {$CancellablePromise<$models.TrackLogStatus | null>}
+ */
+export function StartTrackLogServer(deviceId, port) {
+    return $Call.ByID(1173853272, deviceId, port).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType89($result);
+    }));
 }
 
 /**
@@ -1948,7 +2289,7 @@ export function StopAllHiProfilerCaptures(deviceId) {
  */
 export function StopAllHilogStreams() {
     return $Call.ByID(3222221859).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -1957,7 +2298,7 @@ export function StopAllHilogStreams() {
  */
 export function StopAllLogcatStreams() {
     return $Call.ByID(905304130).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType11($result);
+        return $$createType17($result);
     }));
 }
 
@@ -1987,7 +2328,7 @@ export function StopAndroidNetworkCapture(deviceId, packageName) {
  */
 export function StopApp(connectKey, packageName) {
     return $Call.ByID(823232027, connectKey, packageName).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -2000,7 +2341,7 @@ export function StopApp(connectKey, packageName) {
  */
 export function StopAppByPlatform(connectKey, packageName, platform) {
     return $Call.ByID(1274163749, connectKey, packageName, platform).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -2049,7 +2390,7 @@ export function StopHiProfilerCapture(deviceId, pid) {
  */
 export function StopHilogStream(connectKey) {
     return $Call.ByID(2166192667, connectKey).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -2070,7 +2411,7 @@ export function StopIpcStat(connectKey, pid) {
  */
 export function StopLogStream(connectKey, platform) {
     return $Call.ByID(1007514602, connectKey, platform).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -2080,7 +2421,7 @@ export function StopLogStream(connectKey, platform) {
  */
 export function StopLogcatStream(deviceId) {
     return $Call.ByID(1152566694, deviceId).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType11($result);
+        return $$createType17($result);
     }));
 }
 
@@ -2092,7 +2433,7 @@ export function StopLogcatStream(deviceId) {
  */
 export function StopPhoneAgent(sessionID) {
     return $Call.ByID(915681413, sessionID).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -2103,7 +2444,7 @@ export function StopPhoneAgent(sessionID) {
  */
 export function StopScreenMirror(deviceSn) {
     return $Call.ByID(2535289159, deviceSn).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -2114,7 +2455,7 @@ export function StopScreenMirror(deviceSn) {
  */
 export function StopScreenRecord(connectKey) {
     return $Call.ByID(1840820097, connectKey).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -2128,6 +2469,17 @@ export function StopShell(shellId) {
 }
 
 /**
+ * StopTrackLogServer 停止本机埋点接收；以服务端已绑定设备为准（UI 可能已切到别的机）。
+ * @param {string} deviceId
+ * @returns {$CancellablePromise<$models.TrackLogStatus | null>}
+ */
+export function StopTrackLogServer(deviceId) {
+    return $Call.ByID(2271356108, deviceId).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType89($result);
+    }));
+}
+
+/**
  * TakeScreenshot 截取设备屏幕截图
  * @param {string} connectKey
  * @param {string} savePath
@@ -2136,7 +2488,7 @@ export function StopShell(shellId) {
  */
 export function TakeScreenshot(connectKey, savePath, format) {
     return $Call.ByID(2960633239, connectKey, savePath, format).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -2147,7 +2499,18 @@ export function TakeScreenshot(connectKey, savePath, format) {
  */
 export function TestConnection(localPort) {
     return $Call.ByID(135248668, localPort).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
+    }));
+}
+
+/**
+ * TestLLMConnection 验证 Key，并尽量拉取该厂商模型列表
+ * @param {phoneAgent$0.LLMConfig} config
+ * @returns {$CancellablePromise<{ [_ in string]?: any }>}
+ */
+export function TestLLMConnection(config) {
+    return $Call.ByID(348072571, config).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType9($result);
     }));
 }
 
@@ -2162,7 +2525,7 @@ export function TestConnection(localPort) {
  */
 export function TouchDown(deviceSn, x, y) {
     return $Call.ByID(2965111083, deviceSn, x, y).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -2175,7 +2538,7 @@ export function TouchDown(deviceSn, x, y) {
  */
 export function TouchMove(deviceSn, x, y) {
     return $Call.ByID(2306873878, deviceSn, x, y).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -2193,7 +2556,7 @@ export function TouchMove(deviceSn, x, y) {
  */
 export function TouchMoveFromTo(deviceSn, startX, startY, endX, endY, smoothTime) {
     return $Call.ByID(1056398471, deviceSn, startX, startY, endX, endY, smoothTime).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -2206,7 +2569,7 @@ export function TouchMoveFromTo(deviceSn, startX, startY, endX, endY, smoothTime
  */
 export function TouchUp(deviceSn, x, y) {
     return $Call.ByID(4258587082, deviceSn, x, y).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType9($result);
     }));
 }
 
@@ -2218,7 +2581,7 @@ export function TouchUp(deviceSn, x, y) {
  */
 export function UninstallApp(connectKey, packageName) {
     return $Call.ByID(2326448121, connectKey, packageName).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -2231,7 +2594,7 @@ export function UninstallApp(connectKey, packageName) {
  */
 export function UninstallAppByPlatform(connectKey, packageName, platform) {
     return $Call.ByID(4125878243, connectKey, packageName, platform).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -2242,7 +2605,7 @@ export function UninstallAppByPlatform(connectKey, packageName, platform) {
  */
 export function WaitForDevice(connectKey) {
     return $Call.ByID(3786752182, connectKey).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType11($result);
     }));
 }
 
@@ -2259,102 +2622,119 @@ export function WriteToShell(shellId, data) {
 // Private type creation functions
 const $$createType0 = device$0.CommandResult.createFrom;
 const $$createType1 = $Create.Nullable($$createType0);
-const $$createType2 = $models.PortForwardStatus.createFrom;
+const $$createType2 = applayout$0.DumpResult.createFrom;
 const $$createType3 = $Create.Nullable($$createType2);
-const $$createType4 = $Create.Map($Create.Any, $Create.Any);
-const $$createType5 = $Create.Map($Create.Any, $Create.Any);
-const $$createType6 = hdc$0.HdcResult.createFrom;
+const $$createType4 = applayout$0.PageInfo.createFrom;
+const $$createType5 = $Create.Array($$createType4);
+const $$createType6 = $models.PortForwardStatus.createFrom;
 const $$createType7 = $Create.Nullable($$createType6);
-const $$createType8 = $models.WirelessDebugResult.createFrom;
-const $$createType9 = $Create.Nullable($$createType8);
-const $$createType10 = adb$0.AdbResult.createFrom;
+const $$createType8 = $Create.Map($Create.Any, $Create.Any);
+const $$createType9 = $Create.Map($Create.Any, $Create.Any);
+const $$createType10 = hdc$0.HdcResult.createFrom;
 const $$createType11 = $Create.Nullable($$createType10);
-const $$createType12 = $models.CommandResult.createFrom;
+const $$createType12 = $models.WirelessDebugResult.createFrom;
 const $$createType13 = $Create.Nullable($$createType12);
-const $$createType14 = adb$0.AndroidAppListResult.createFrom;
+const $$createType14 = $models.PreparedInstallPackage.createFrom;
 const $$createType15 = $Create.Nullable($$createType14);
-const $$createType16 = $Create.Array($$createType5);
-const $$createType17 = hdc$0.AppListResult.createFrom;
-const $$createType18 = $Create.Nullable($$createType17);
-const $$createType19 = hdc$0.BatteryInfo.createFrom;
-const $$createType20 = $Create.Nullable($$createType19);
-const $$createType21 = device$0.BatteryInfo.createFrom;
-const $$createType22 = $Create.Nullable($$createType21);
-const $$createType23 = hdc$0.CpuDetailInfo.createFrom;
+const $$createType16 = adb$0.AdbResult.createFrom;
+const $$createType17 = $Create.Nullable($$createType16);
+const $$createType18 = $models.CommandResult.createFrom;
+const $$createType19 = $Create.Nullable($$createType18);
+const $$createType20 = adb$0.AndroidAppListResult.createFrom;
+const $$createType21 = $Create.Nullable($$createType20);
+const $$createType22 = $Create.Array($$createType9);
+const $$createType23 = hdc$0.AppListResult.createFrom;
 const $$createType24 = $Create.Nullable($$createType23);
-const $$createType25 = hdc$0.CpuFreqInfo.createFrom;
+const $$createType25 = hdc$0.BatteryInfo.createFrom;
 const $$createType26 = $Create.Nullable($$createType25);
-const $$createType27 = hdc$0.CpuUsageInfo.createFrom;
+const $$createType27 = device$0.BatteryInfo.createFrom;
 const $$createType28 = $Create.Nullable($$createType27);
-const $$createType29 = device$0.CpuUsageInfo.createFrom;
+const $$createType29 = hdc$0.CpuDetailInfo.createFrom;
 const $$createType30 = $Create.Nullable($$createType29);
-const $$createType31 = hdc$0.DeviceDetailInfo.createFrom;
+const $$createType31 = hdc$0.CpuFreqInfo.createFrom;
 const $$createType32 = $Create.Nullable($$createType31);
-const $$createType33 = device$0.DeviceDetailInfo.createFrom;
+const $$createType33 = hdc$0.CpuUsageInfo.createFrom;
 const $$createType34 = $Create.Nullable($$createType33);
-const $$createType35 = hdc$0.DeviceInfo.createFrom;
+const $$createType35 = device$0.CpuUsageInfo.createFrom;
 const $$createType36 = $Create.Nullable($$createType35);
-const $$createType37 = $models.DisplaySize.createFrom;
+const $$createType37 = hdc$0.DeviceDetailInfo.createFrom;
 const $$createType38 = $Create.Nullable($$createType37);
-const $$createType39 = hdc$0.FaultLogEntry.createFrom;
-const $$createType40 = $Create.Array($$createType39);
-const $$createType41 = hdc$0.GraphicsInfo.createFrom;
+const $$createType39 = device$0.DeviceDetailInfo.createFrom;
+const $$createType40 = $Create.Nullable($$createType39);
+const $$createType41 = hdc$0.DeviceInfo.createFrom;
 const $$createType42 = $Create.Nullable($$createType41);
-const $$createType43 = hdc$0.IpcStatInfo.createFrom;
+const $$createType43 = $models.DisplaySize.createFrom;
 const $$createType44 = $Create.Nullable($$createType43);
-const $$createType45 = hdc$0.MemoryDetailInfo.createFrom;
-const $$createType46 = $Create.Nullable($$createType45);
-const $$createType47 = hdc$0.MemoryInfo.createFrom;
+const $$createType45 = hdc$0.FaultLogEntry.createFrom;
+const $$createType46 = $Create.Array($$createType45);
+const $$createType47 = hdc$0.GraphicsInfo.createFrom;
 const $$createType48 = $Create.Nullable($$createType47);
-const $$createType49 = device$0.MemoryInfo.createFrom;
-const $$createType50 = $Create.Nullable($$createType49);
-const $$createType51 = hdc$0.NetworkInfo.createFrom;
-const $$createType52 = $Create.Array($$createType51);
-const $$createType53 = device$0.NetworkInfo.createFrom;
-const $$createType54 = $Create.Array($$createType53);
-const $$createType55 = hdc$0.NetworkTrafficInfo.createFrom;
-const $$createType56 = $Create.Array($$createType55);
-const $$createType57 = hdc$0.OnlineAppInfo.createFrom;
+const $$createType49 = installhistory$0.Item.createFrom;
+const $$createType50 = $Create.Array($$createType49);
+const $$createType51 = hdc$0.IpcStatInfo.createFrom;
+const $$createType52 = $Create.Nullable($$createType51);
+const $$createType53 = hdc$0.MemoryDetailInfo.createFrom;
+const $$createType54 = $Create.Nullable($$createType53);
+const $$createType55 = hdc$0.MemoryInfo.createFrom;
+const $$createType56 = $Create.Nullable($$createType55);
+const $$createType57 = device$0.MemoryInfo.createFrom;
 const $$createType58 = $Create.Nullable($$createType57);
-const $$createType59 = hdc$0.ProcessCpuEntry.createFrom;
+const $$createType59 = hdc$0.NetworkInfo.createFrom;
 const $$createType60 = $Create.Array($$createType59);
-const $$createType61 = hdc$0.ProcessIOInfo.createFrom;
-const $$createType62 = $Create.Nullable($$createType61);
-const $$createType63 = $models.ProcessListResult.createFrom;
-const $$createType64 = $Create.Nullable($$createType63);
-const $$createType65 = hdc$0.ProcessMemoryDetail.createFrom;
+const $$createType61 = device$0.NetworkInfo.createFrom;
+const $$createType62 = $Create.Array($$createType61);
+const $$createType63 = hdc$0.NetworkTrafficInfo.createFrom;
+const $$createType64 = $Create.Array($$createType63);
+const $$createType65 = hdc$0.OnlineAppInfo.createFrom;
 const $$createType66 = $Create.Nullable($$createType65);
-const $$createType67 = $models.NetworkRequest.createFrom;
+const $$createType67 = hdc$0.ProcessCpuEntry.createFrom;
 const $$createType68 = $Create.Array($$createType67);
-const $$createType69 = hdc$0.StorageInfo.createFrom;
+const $$createType69 = hdc$0.ProcessIOInfo.createFrom;
 const $$createType70 = $Create.Nullable($$createType69);
-const $$createType71 = device$0.StorageInfo.createFrom;
+const $$createType71 = $models.ProcessListResult.createFrom;
 const $$createType72 = $Create.Nullable($$createType71);
-var $$createType73 = /** @type {(...args: any[]) => any} */(function $$initCreateType73(...args) {
-    if ($$createType73 === $$initCreateType73) {
-        $$createType73 = $$createType4;
+const $$createType73 = hdc$0.ProcessMemoryDetail.createFrom;
+const $$createType74 = $Create.Nullable($$createType73);
+const $$createType75 = $models.NetworkRequest.createFrom;
+const $$createType76 = $Create.Array($$createType75);
+const $$createType77 = $models.ShellUIState.createFrom;
+const $$createType78 = hdc$0.StorageInfo.createFrom;
+const $$createType79 = $Create.Nullable($$createType78);
+const $$createType80 = device$0.StorageInfo.createFrom;
+const $$createType81 = $Create.Nullable($$createType80);
+var $$createType82 = /** @type {(...args: any[]) => any} */(function $$initCreateType82(...args) {
+    if ($$createType82 === $$initCreateType82) {
+        $$createType82 = $$createType8;
     }
-    return $$createType73(...args);
+    return $$createType82(...args);
 });
-var $$createType74 = /** @type {(...args: any[]) => any} */(function $$initCreateType74(...args) {
-    if ($$createType74 === $$initCreateType74) {
-        $$createType74 = $$createType4;
+var $$createType83 = /** @type {(...args: any[]) => any} */(function $$initCreateType83(...args) {
+    if ($$createType83 === $$initCreateType83) {
+        $$createType83 = $$createType8;
     }
-    return $$createType74(...args);
+    return $$createType83(...args);
 });
-const $$createType75 = hdc$0.SystemRuntime.createFrom;
-const $$createType76 = $Create.Nullable($$createType75);
-const $$createType77 = device$0.SystemRuntime.createFrom;
-const $$createType78 = $Create.Nullable($$createType77);
-const $$createType79 = device$0.Device.createFrom;
-const $$createType80 = $Create.Array($$createType79);
-const $$createType81 = adb$0.WebViewPage.createFrom;
-const $$createType82 = $Create.Array($$createType81);
-const $$createType83 = hdc$0.HdcDevice.createFrom;
-const $$createType84 = $Create.Array($$createType83);
-const $$createType85 = hdc$0.WebViewPage.createFrom;
-const $$createType86 = $Create.Array($$createType85);
-const $$createType87 = $models.PortForwardItem.createFrom;
-const $$createType88 = $Create.Array($$createType87);
-const $$createType89 = hdc$0.InstallPackageInfo.createFrom;
-const $$createType90 = $Create.Nullable($$createType89);
+const $$createType84 = hdc$0.SystemRuntime.createFrom;
+const $$createType85 = $Create.Nullable($$createType84);
+const $$createType86 = device$0.SystemRuntime.createFrom;
+const $$createType87 = $Create.Nullable($$createType86);
+const $$createType88 = $models.TrackLogStatus.createFrom;
+const $$createType89 = $Create.Nullable($$createType88);
+const $$createType90 = $models.HandyImageFile.createFrom;
+const $$createType91 = $Create.Nullable($$createType90);
+const $$createType92 = $models.HandyHTTPResponse.createFrom;
+const $$createType93 = $Create.Nullable($$createType92);
+const $$createType94 = $models.InstallAttemptResult.createFrom;
+const $$createType95 = $Create.Nullable($$createType94);
+const $$createType96 = device$0.Device.createFrom;
+const $$createType97 = $Create.Array($$createType96);
+const $$createType98 = adb$0.WebViewPage.createFrom;
+const $$createType99 = $Create.Array($$createType98);
+const $$createType100 = hdc$0.HdcDevice.createFrom;
+const $$createType101 = $Create.Array($$createType100);
+const $$createType102 = hdc$0.WebViewPage.createFrom;
+const $$createType103 = $Create.Array($$createType102);
+const $$createType104 = $models.PortForwardItem.createFrom;
+const $$createType105 = $Create.Array($$createType104);
+const $$createType106 = hdc$0.InstallPackageInfo.createFrom;
+const $$createType107 = $Create.Nullable($$createType106);
