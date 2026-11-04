@@ -1,6 +1,8 @@
 import React, { useState } from 'react'
 import { History, Plus, X, Zap } from 'lucide-react'
 import { usePhoneAgentStore } from '@/modules/phoneAgent/store'
+import { usePhoneAgentConfigStore } from '@/store/phoneAgentConfigStore'
+import { getEffortPreset, getProviderPreset } from '@/modules/phoneAgent/providers'
 import { PhoneAgent } from '@/modules/phoneAgent/agent'
 import { ChatHistoryDialog } from './ChatHistoryDialog'
 import { toast } from 'sonner'
@@ -11,8 +13,11 @@ import { toast } from 'sonner'
  */
 export function TaskBar(): React.JSX.Element {
   const { currentTask, isRunning, sessionID, stepCount, reset } = usePhoneAgentStore()
+  const { llmConfig } = usePhoneAgentConfigStore()
   const [agent, setAgent] = useState<PhoneAgent | null>(null)
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
+  const providerLabel = getProviderPreset(llmConfig.provider).label
+  const effortLabel = getEffortPreset(llmConfig.effort).label
 
   // 获取Agent实例
   React.useEffect(() => {
@@ -54,7 +59,18 @@ export function TaskBar(): React.JSX.Element {
             <Zap className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <div className="text-xs font-medium text-muted-foreground">当前任务</div>
+            <div className="flex items-center gap-2">
+              <div className="text-xs font-medium text-muted-foreground">当前任务</div>
+              <span className="px-1.5 py-0.5 rounded bg-muted text-[11px] text-muted-foreground">
+                {providerLabel}
+              </span>
+              <span className="max-w-[140px] truncate px-1.5 py-0.5 rounded bg-muted text-[11px] text-muted-foreground">
+                {llmConfig.model}
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-muted text-[11px] text-muted-foreground">
+                {effortLabel}
+              </span>
+            </div>
             <div className="text-sm font-medium text-foreground">
               {currentTask || '未开始'}
               {isRunning && (

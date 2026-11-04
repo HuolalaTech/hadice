@@ -46,7 +46,7 @@ export function AppActionDialog({
           <DialogTitle className="flex items-center gap-2">
             {actionType === 'start' && (
               <>
-                <Play className="h-5 w-5 text-green-500" />
+                <Play className="h-5 w-5 text-green-700 dark:text-green-400" />
                 启动应用
               </>
             )}

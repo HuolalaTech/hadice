@@ -3,6 +3,11 @@ import { ChevronDown, Search, Loader2 } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import type { HarmonyDebuggableApp } from '@/types/hdc'
 import { networkCaptureAPI } from '@/lib/hdc-api/network-capture'
+import { reconcileHarmonyCaptureApp } from '@/lib/capture-selected-app'
+import {
+  peekHarmonyProcessListCache,
+  setHarmonyProcessListCache,
+} from '@/lib/process-list-cache'
 
 export interface HarmonyProcessSelectHandle {
   fetchApps: () => Promise<HarmonyDebuggableApp[]>
@@ -21,21 +26,26 @@ export const HarmonyProcessSelect = forwardRef<HarmonyProcessSelectHandle, Harmo
 ) {
   const [apps, setApps] = useState<HarmonyDebuggableApp[]>([])
   const [loading, setLoading] = useState(false)
+  const [listFetched, setListFetched] = useState(false)
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const containerRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const appsRef = useRef(apps)
+  appsRef.current = apps
 
   const fetchApps = useCallback(async (): Promise<HarmonyDebuggableApp[]> => {
     if (!deviceId) return []
-    setLoading(true)
+    if (appsRef.current.length === 0) setLoading(true)
     try {
       const result = await networkCaptureAPI.GetHiProfilerApps(deviceId)
-      setApps(result || [])
-      return result || []
+      const list = result || []
+      setApps(list)
+      setHarmonyProcessListCache(deviceId, list)
+      setListFetched(true)
+      return list
     } catch {
-      setApps([])
-      return []
+      return appsRef.current
     } finally {
       setLoading(false)
     }
@@ -43,9 +53,36 @@ export const HarmonyProcessSelect = forwardRef<HarmonyProcessSelectHandle, Harmo
 
   useImperativeHandle(ref, () => ({ fetchApps }), [fetchApps])
 
+  // 切回面板：有缓存直接回显，不打设备；无缓存才拉一次
   useEffect(() => {
-    fetchApps()
-  }, [fetchApps])
+    if (!deviceId) return
+    const cached = peekHarmonyProcessListCache<HarmonyDebuggableApp>(deviceId)
+    if (cached) {
+      setApps(cached.apps)
+      setListFetched(true)
+      return
+    }
+    setListFetched(false)
+    setApps([])
+    void fetchApps()
+  }, [deviceId, fetchApps])
+
+  // 列表成功拉取后：回填 PID；找不到则清除（已卸载）
+  useEffect(() => {
+    if (!listFetched || !value) return
+    const next = reconcileHarmonyCaptureApp(value, apps)
+    if (next === null) {
+      onChange(null)
+      return
+    }
+    if (
+      next.pid !== value.pid ||
+      next.appName !== value.appName ||
+      next.bundleName !== value.bundleName
+    ) {
+      onChange(next)
+    }
+  }, [apps, listFetched, value, onChange])
 
   // 点击外部关闭
   useEffect(() => {
@@ -58,10 +95,10 @@ export const HarmonyProcessSelect = forwardRef<HarmonyProcessSelectHandle, Harmo
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // 打开时聚焦搜索框并刷新进程列表
+  // 打开下拉时才强制刷新
   useEffect(() => {
     if (open) {
-      fetchApps()
+      void fetchApps()
       setTimeout(() => searchInputRef.current?.focus(), 0)
     } else {
       setSearch('')

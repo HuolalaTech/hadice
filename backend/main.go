@@ -69,6 +69,7 @@ func Run(assets embed.FS) error {
 
 	// Create main window
 	mainWindow := app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name:             mainWindowName,
 		Title:            "Hadice",
 		Width:            windowWidth,
 		Height:           windowHeight,
@@ -97,6 +98,18 @@ func Run(assets embed.FS) error {
 		log.Println("[Main] Window closing, quitting application")
 		app.Quit()
 	})
+
+	// 文件拖入/离开窗口（macOS 原生拖拽不触发 HTML5 dragenter，前端靠此事件亮框反馈）
+	for _, et := range []events.WindowEventType{events.Mac.WindowFileDraggingEntered, events.Windows.WindowDragEnter} {
+		mainWindow.OnWindowEvent(et, func(_ *application.WindowEvent) {
+			application.Get().Event.Emit("file-drag-enter", nil)
+		})
+	}
+	for _, et := range []events.WindowEventType{events.Mac.WindowFileDraggingExited, events.Windows.WindowDragLeave} {
+		mainWindow.OnWindowEvent(et, func(_ *application.WindowEvent) {
+			application.Get().Event.Emit("file-drag-exit", nil)
+		})
+	}
 
 	// 监听文件拖放事件，将拖放的文件路径转发给前端
 	// data-file-drop-target 标记前端可接收文件的区域。

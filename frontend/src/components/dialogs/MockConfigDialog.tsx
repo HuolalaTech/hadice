@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import CodeMirror, { EditorView } from '@uiw/react-codemirror'
 import { json } from '@codemirror/lang-json'
-import { syntaxTree } from '@codemirror/language'
+import { foldAll, syntaxTree, unfoldAll } from '@codemirror/language'
 import { linter, type Diagnostic, type LintSource } from '@codemirror/lint'
-import { Plus, Trash2, TestTube, XCircle } from 'lucide-react'
+import { ChevronsDownUp, ChevronsUpDown, Plus, Trash2, TestTube, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Dialog,
@@ -548,7 +548,9 @@ function ReplaceModeConfig({
   }, [config.headers])
 
   const [headers, setHeaders] = useState<Array<{ key: string; value: string }>>(headersFromConfig)
+  const [bodyFolded, setBodyFolded] = useState(false)
   const isInternalUpdateRef = useRef(false)
+  const bodyEditorViewRef = useRef<EditorView | null>(null)
 
   // 当 config.headers 从外部变化时，同步到本地状态（排除内部更新）
   useEffect(() => {
@@ -652,11 +654,37 @@ function ReplaceModeConfig({
         <JsonBodyEditor
           value={config.body || ''}
           onChange={(e) => onConfigChange({ body: e.target.value })}
+          onCreateEditor={(view) => {
+            bodyEditorViewRef.current = view
+          }}
           className="h-[520px]"
         />
-        <div className="flex gap-2 mt-2">
+        <div className="flex gap-2 mt-2 items-center">
           <Button variant="outline" size="sm" onClick={onFormatJson}>
             格式化 JSON
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 w-8 p-0"
+            title={bodyFolded ? '全部展开' : '全部折叠'}
+            onClick={() => {
+              const view = bodyEditorViewRef.current
+              if (!view) return
+              if (bodyFolded) {
+                unfoldAll(view)
+                setBodyFolded(false)
+              } else {
+                foldAll(view)
+                setBodyFolded(true)
+              }
+            }}
+          >
+            {bodyFolded ? (
+              <ChevronsUpDown className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronsDownUp className="h-3.5 w-3.5" />
+            )}
           </Button>
           <Button
             variant="outline"
@@ -674,10 +702,16 @@ function ReplaceModeConfig({
 interface JsonBodyEditorProps {
   value: string
   onChange: (event: { target: { value: string } }) => void
+  onCreateEditor?: (view: EditorView) => void
   className?: string
 }
 
-function JsonBodyEditor({ value, onChange, className }: JsonBodyEditorProps): React.JSX.Element {
+function JsonBodyEditor({
+  value,
+  onChange,
+  onCreateEditor,
+  className
+}: JsonBodyEditorProps): React.JSX.Element {
   const theme = useThemeStore((s) => s.theme)
   const extensions = React.useMemo(() => [
     json(),
@@ -706,6 +740,7 @@ function JsonBodyEditor({ value, onChange, className }: JsonBodyEditorProps): Re
         }}
         extensions={extensions}
         onChange={(nextValue) => onChange({ target: { value: nextValue } })}
+        onCreateEditor={onCreateEditor}
         placeholder='{"code": 200, "message": "Mock Response", "data": {}}'
         className="h-full w-full max-w-full min-w-0 text-xs"
       />

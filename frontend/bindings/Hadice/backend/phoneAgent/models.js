@@ -173,15 +173,11 @@ export const LLMProvider = {
      */
     $zero: "",
 
-    /**
-     * ProviderZhipuAI 智谱AI
-     */
     ProviderZhipuAI: "zhipu",
-
-    /**
-     * ProviderOpenAI OpenAI
-     */
     ProviderOpenAI: "openai",
+    ProviderDeepSeek: "deepseek",
+    ProviderOpenRouter: "openrouter",
+    ProviderCustom: "custom",
 };
 
 // Private type creation functions

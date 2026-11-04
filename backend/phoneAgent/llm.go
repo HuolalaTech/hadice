@@ -33,6 +33,107 @@ func RemoveImagesFromMessage(msg ChatMessage) ChatMessage {
 	return msg
 }
 
+func chatCompletionsURL(provider LLMProvider, baseURL string) string {
+	base := strings.TrimSpace(baseURL)
+	if base == "" {
+		switch provider {
+		case ProviderZhipuAI:
+			base = "https://open.bigmodel.cn/api/paas/v4"
+		case ProviderDeepSeek:
+			base = "https://api.deepseek.com"
+		case ProviderOpenRouter:
+			base = "https://openrouter.ai/api/v1"
+		default:
+			base = "https://api.openai.com/v1"
+		}
+	}
+	if strings.Contains(base, "/chat/completions") {
+		return base
+	}
+	return strings.TrimSuffix(base, "/") + "/chat/completions"
+}
+
+func modelsURL(provider LLMProvider, baseURL string) string {
+	chatURL := chatCompletionsURL(provider, baseURL)
+	return strings.TrimSuffix(chatURL, "/chat/completions") + "/models"
+}
+
+func parseModelIDs(body []byte) []string {
+	var openaiFmt struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(body, &openaiFmt) == nil && len(openaiFmt.Data) > 0 {
+		ids := make([]string, 0, len(openaiFmt.Data))
+		seen := map[string]bool{}
+		for _, item := range openaiFmt.Data {
+			id := strings.TrimSpace(item.ID)
+			if id == "" || seen[id] {
+				continue
+			}
+			seen[id] = true
+			ids = append(ids, id)
+		}
+		return ids
+	}
+
+	var ollamaFmt struct {
+		Models []struct {
+			Name string `json:"name"`
+			ID   string `json:"id"`
+		} `json:"models"`
+	}
+	if json.Unmarshal(body, &ollamaFmt) == nil && len(ollamaFmt.Models) > 0 {
+		ids := make([]string, 0, len(ollamaFmt.Models))
+		seen := map[string]bool{}
+		for _, item := range ollamaFmt.Models {
+			id := strings.TrimSpace(item.Name)
+			if id == "" {
+				id = strings.TrimSpace(item.ID)
+			}
+			if id == "" || seen[id] {
+				continue
+			}
+			seen[id] = true
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// ListModels 拉取当前厂商 /models
+func (c *LLMClient) ListModels() ([]string, error) {
+	if strings.TrimSpace(c.config.APIKey) == "" {
+		return nil, fmt.Errorf("API密钥不能为空")
+	}
+
+	req, err := http.NewRequest("GET", modelsURL(c.config.Provider, c.config.BaseURL), nil)
+	if err != nil {
+		return nil, fmt.Errorf("创建请求失败: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.config.APIKey)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("拉取模型失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, formatLLMHTTPError(resp.StatusCode, body)
+	}
+
+	ids := parseModelIDs(body)
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("模型列表为空")
+	}
+	return ids, nil
+}
+
 // NewLLMClient 创建LLM客户端
 func NewLLMClient(config LLMConfig) *LLMClient {
 	return &LLMClient{
@@ -41,6 +142,73 @@ func NewLLMClient(config LLMConfig) *LLMClient {
 			Timeout: 120 * time.Second, // 2分钟超时
 		},
 	}
+}
+
+func formatLLMHTTPError(status int, body []byte) error {
+	var parsed struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+		Message string `json:"message"`
+	}
+	if json.Unmarshal(body, &parsed) == nil {
+		if parsed.Error.Message != "" {
+			return fmt.Errorf("HTTP %d: %s", status, parsed.Error.Message)
+		}
+		if parsed.Message != "" {
+			return fmt.Errorf("HTTP %d: %s", status, parsed.Message)
+		}
+	}
+	bodyStr := strings.TrimSpace(string(body))
+	if len(bodyStr) > 200 {
+		bodyStr = bodyStr[:200] + "..."
+	}
+	if bodyStr == "" {
+		return fmt.Errorf("HTTP %d", status)
+	}
+	return fmt.Errorf("HTTP %d: %s", status, bodyStr)
+}
+
+// Ping 发一条最小 chat 请求，只验证 Key / URL / 模型是否通
+func (c *LLMClient) Ping() error {
+	if strings.TrimSpace(c.config.APIKey) == "" {
+		return fmt.Errorf("API密钥不能为空")
+	}
+	if strings.TrimSpace(c.config.Model) == "" {
+		return fmt.Errorf("模型名称不能为空")
+	}
+
+	apiURL := chatCompletionsURL(c.config.Provider, c.config.BaseURL)
+	requestBody := LLMRequest{
+		Model:     c.config.Model,
+		Messages:  []ChatMessage{{Role: "user", Content: "ping"}},
+		MaxTokens: 8,
+		Stream:    false,
+	}
+	jsonData, err := json.Marshal(requestBody)
+	if err != nil {
+		return fmt.Errorf("序列化请求失败: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("创建请求失败: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.config.APIKey)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("请求失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return formatLLMHTTPError(resp.StatusCode, body)
+	}
+	return nil
 }
 
 // ChatMessage 聊天消息
@@ -73,44 +241,14 @@ type LLMResponseChunk struct {
 // onChunk: 接收数据块的回调函数
 // 返回完整响应和错误
 func (c *LLMClient) Request(messages []ChatMessage, onChunk func(chunk *StreamChunk) error) (*LLMResponse, error) {
-	var apiURL string
-	var requestBody LLMRequest
-
-	// 根据提供商设置API URL和请求格式
-	switch c.config.Provider {
-	case ProviderZhipuAI:
-		apiURL = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
-		if c.config.BaseURL != "" {
-			// 如果BaseURL不包含/chat/completions，则自动拼接
-			if !strings.Contains(c.config.BaseURL, "/chat/completions") {
-				apiURL = strings.TrimSuffix(c.config.BaseURL, "/") + "/chat/completions"
-			} else {
-				apiURL = c.config.BaseURL
-			}
-		}
-		requestBody = LLMRequest{
-			Model:       c.config.Model,
-			Messages:    messages,
-			MaxTokens:   c.config.MaxTokens,
-			Temperature: c.config.Temperature,
-			TopP:        c.config.TopP,
-			Stream:      true,
-		}
-	case ProviderOpenAI:
-		apiURL = "https://api.openai.com/v1/chat/completions"
-		if c.config.BaseURL != "" {
-			apiURL = c.config.BaseURL
-		}
-		requestBody = LLMRequest{
-			Model:       c.config.Model,
-			Messages:    messages,
-			MaxTokens:   c.config.MaxTokens,
-			Temperature: c.config.Temperature,
-			TopP:        c.config.TopP,
-			Stream:      true,
-		}
-	default:
-		return nil, fmt.Errorf("不支持的LLM提供商: %s", c.config.Provider)
+	apiURL := chatCompletionsURL(c.config.Provider, c.config.BaseURL)
+	requestBody := LLMRequest{
+		Model:       c.config.Model,
+		Messages:    messages,
+		MaxTokens:   c.config.MaxTokens,
+		Temperature: c.config.Temperature,
+		TopP:        c.config.TopP,
+		Stream:      true,
 	}
 
 	// 序列化请求体
@@ -128,13 +266,7 @@ func (c *LLMClient) Request(messages []ChatMessage, onChunk func(chunk *StreamCh
 	}
 	// 设置请求头
 	req.Header.Set("Content-Type", "application/json")
-	if c.config.Provider == ProviderZhipuAI {
-		// 智谱AI使用Authorization Bearer格式
-		req.Header.Set("Authorization", "Bearer "+c.config.APIKey)
-	} else {
-		// OpenAI也使用Authorization Bearer格式
-		req.Header.Set("Authorization", "Bearer "+c.config.APIKey)
-	}
+	req.Header.Set("Authorization", "Bearer "+c.config.APIKey)
 
 	// 发送请求
 	resp, err := c.client.Do(req)

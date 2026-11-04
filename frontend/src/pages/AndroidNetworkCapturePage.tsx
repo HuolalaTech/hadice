@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { toast } from 'sonner'
-import { Smartphone, Play, Square, Trash2, Search, Wand2 } from 'lucide-react'
+import { Smartphone, Play, Square, Trash2, Search, Download, Wand2 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,6 +13,7 @@ import { useMockStore } from '@/store/mockStore'
 import { ProcessSelect, type ProcessSelectHandle } from '@/components/android/ProcessSelect'
 import { NetworkRequestTable } from '@/components/network/NetworkRequestTable'
 import { NetworkRequestDetail } from '@/components/network/NetworkRequestDetail'
+import { CollapsibleSplitPane } from '@/components/network/CollapsibleSplitPane'
 import { WebViewPagesPanel } from '@/components/network/WebViewPagesPanel'
 import { ExportNetworkDialog } from '@/components/dialogs/ExportNetworkDialog'
 import { MockConfigDialog } from '@/components/dialogs/MockConfigDialog'
@@ -20,6 +21,8 @@ import { WindowToggleButton } from '@/components/layout/WindowToggleButton'
 import { HelpToggleButton } from '@/components/layout/HelpToggleButton'
 import { networkCaptureAPI } from '@/lib/hdc-api/network-capture'
 import { getNetworkRequestKey } from '@/lib/network-request-key'
+import { hydrateAndroidCaptureApp } from '@/lib/capture-selected-app'
+import { useCaptureSelectedAppStore } from '@/store/captureSelectedAppStore'
 import type { NetworkRequest, AndroidCaptureStatus, AndroidApp, MockConfig, MockRule } from '@/types/hdc'
 
 type PanelView = 'requests' | 'webview'
@@ -41,8 +44,6 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
     clearRequests: storeClearRequests,
   } = useNetworkCaptureStore()
 
-  const [leftPanelWidth, setLeftPanelWidth] = useState(45)
-  const [isResizing, setIsResizing] = useState(false)
   const [panelView, setPanelView] = useState<PanelView>('requests')
   const processSelectRef = useRef<ProcessSelectHandle>(null)
   const searchDebounceRef = useRef<NodeJS.Timeout | null>(null)
@@ -56,7 +57,7 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
 
   // 导出勾选状态（始终展示）
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [exportRequestsOverride, setExportRequestsOverride] = useState<NetworkRequest[] | null>(null)
+  const [singleExportRequest, setSingleExportRequest] = useState<NetworkRequest | null>(null)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
 
   const deviceId = selectedDevice?.connectKey || null
@@ -73,6 +74,18 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
     packageName: '',
     processName: ''
   }
+  const setCaptureAppForDevice = useCaptureSelectedAppStore((s) => s.setForDevice)
+  const getCaptureAppForDevice = useCaptureSelectedAppStore((s) => s.getForDevice)
+  const [captureAppStoreReady, setCaptureAppStoreReady] = useState(() =>
+    useCaptureSelectedAppStore.persist.hasHydrated()
+  )
+  const skipNextCaptureAppPersistRef = useRef(false)
+  useEffect(() => {
+    setCaptureAppStoreReady(useCaptureSelectedAppStore.persist.hasHydrated())
+    return useCaptureSelectedAppStore.persist.onFinishHydration(() => {
+      setCaptureAppStoreReady(true)
+    })
+  }, [])
 
   const setSelectedApp = useCallback((app: AndroidApp | null | ((current: AndroidApp | null) => AndroidApp | null)) => {
     if (deviceId) storeSetSelectedApp(deviceId, app)
@@ -117,8 +130,8 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
   }, [])
 
   // 已选中的请求列表
-  const selectedRequests = requests.filter((r) => !r.isSessionBoundary && selectedIds.has(getRequestKey(r)))
-  const exportRequests = exportRequestsOverride ?? selectedRequests
+  const selectedRequests = requests.filter((r) => selectedIds.has(getRequestKey(r)))
+  const exportRequests = singleExportRequest ? [singleExportRequest] : selectedRequests
 
   // 切换单个请求选中状态
   const handleToggleSelect = useCallback((request: NetworkRequest) => {
@@ -166,26 +179,33 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
     })
   }, [requests, isFilterMode, searchQuery, searchMatches, selectedIds, getRequestKey])
 
-  const handleExportRequests = useCallback((requestsToExport: NetworkRequest[]): void => {
-    setExportRequestsOverride(requestsToExport)
+  // 点击导出按钮 → 始终打开弹窗
+  const handleExportClick = useCallback(() => {
+    setSingleExportRequest(null)
     setExportDialogOpen(true)
   }, [])
 
-  const handleDeleteRequests = useCallback((requestsToDelete: NetworkRequest[]): void => {
+  const handleExportSingleRequest = useCallback((request: NetworkRequest): void => {
+    setSelectedRequest(request)
+    setSingleExportRequest(request)
+    setExportDialogOpen(true)
+  }, [setSelectedRequest])
+
+  const handleDeleteSingleRequest = useCallback((request: NetworkRequest): void => {
     if (!deviceId) return
 
-    const keys = new Set(requestsToDelete.map(getRequestKey))
-    const remaining = requests.filter((request) => !keys.has(getRequestKey(request)))
+    const key = getRequestKey(request)
+    const remaining = requests.filter((r) => getRequestKey(r) !== key)
     storeSetRequests(deviceId, remaining)
     setSelectedIds((prev) => {
       const next = new Set(prev)
-      for (const key of keys) next.delete(key)
+      next.delete(key)
       return next
     })
-    if (selectedRequest && keys.has(getRequestKey(selectedRequest))) {
+    if (selectedRequest && getRequestKey(selectedRequest) === key) {
       storeSetSelectedRequest(deviceId, null)
     }
-    toast.success(requestsToDelete.length > 1 ? `已删除 ${requestsToDelete.length} 个请求` : '已删除该请求')
+    toast.success('已删除该请求')
   }, [deviceId, getRequestKey, requests, selectedRequest, storeSetRequests, storeSetSelectedRequest])
 
   const prettyJsonOrOriginal = useCallback((value?: string): string => {
@@ -255,6 +275,40 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
       initializeAndroidCaptureSession(deviceId)
     }
   }, [deviceId, initializeDevice, initializeAndroidCaptureSession, syncStatus])
+
+  // 切设备 / 重启后：内存会话无选择时从 localStorage 恢复（切面板仍优先用内存会话）
+  useEffect(() => {
+    if (!captureAppStoreReady || !deviceId) return
+    initializeAndroidCaptureSession(deviceId)
+    const session = useAndroidCaptureStore.getState().sessions.get(deviceId)
+    if (session?.selectedApp) return
+    skipNextCaptureAppPersistRef.current = true
+    storeSetSelectedApp(
+      deviceId,
+      hydrateAndroidCaptureApp(getCaptureAppForDevice(deviceId), [])
+    )
+  }, [
+    captureAppStoreReady,
+    deviceId,
+    getCaptureAppForDevice,
+    initializeAndroidCaptureSession,
+    storeSetSelectedApp,
+  ])
+
+  // 记住选择；恢复写入的那一次不落盘
+  useEffect(() => {
+    if (!captureAppStoreReady || !deviceId) return
+    if (skipNextCaptureAppPersistRef.current) {
+      skipNextCaptureAppPersistRef.current = false
+      return
+    }
+    setCaptureAppForDevice(deviceId, selectedApp)
+  }, [
+    captureAppStoreReady,
+    deviceId,
+    selectedApp,
+    setCaptureAppForDevice,
+  ])
 
   // 菜单切回本页时，以后台真实会话校准已缓存的状态，处理离页期间进程重启等情况。
   useEffect(() => {
@@ -355,32 +409,6 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
       toast.dismiss(restartToastId)
     }
   }, [deviceId])
-
-  // 拖拽调整面板宽度
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent): void => {
-      if (!isResizing) return
-      const container = document.getElementById('android-capture-container')
-      if (!container) return
-      const containerRect = container.getBoundingClientRect()
-      const newLeftWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100
-      setLeftPanelWidth(Math.max(20, Math.min(80, newLeftWidth)))
-    }
-    const handleMouseUp = (): void => setIsResizing(false)
-
-    if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove)
-      document.addEventListener('mouseup', handleMouseUp)
-      document.body.style.cursor = 'col-resize'
-      document.body.style.userSelect = 'none'
-    }
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
-  }, [isResizing])
 
   // 搜索匹配函数
   const performSearch = useCallback((query: string, regexMode: boolean, reqs: NetworkRequest[]): void => {
@@ -700,11 +728,10 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
   const handleExportDialogOpenChange = useCallback((open: boolean): void => {
     setExportDialogOpen(open)
     if (!open) {
-      setExportRequestsOverride(null)
+      setSingleExportRequest(null)
     }
   }, [])
 
-  // 清空整个请求列表，包括设备断开等会话边界项。
   const webViewTarget = useMemo(
     () =>
       selectedApp
@@ -726,12 +753,17 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
   const handleClearRequests = useCallback((): void => {
     if (!deviceId) return
 
+    if (selectedIds.size === 0) {
+      toast.warning('请先在左侧请求列表前勾选想要删除的项')
+      return
+    }
+
     captureEvent('android capture cleared')
-    storeClearRequests(deviceId)
+    const remaining = requests.filter((r) => !selectedIds.has(getRequestKey(r)))
+    storeSetRequests(deviceId, remaining)
     setSelectedIds(new Set())
     storeSetSelectedRequest(deviceId, null)
-    toast.success('已清空请求列表')
-  }, [deviceId, storeClearRequests, storeSetSelectedRequest])
+  }, [deviceId, selectedIds, requests, getRequestKey, storeSetRequests, storeSetSelectedRequest])
 
   // 表头一键清屏：清空当前设备抓包面板全部数据
   const handleClearAllRequests = useCallback((): void => {
@@ -891,6 +923,16 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
             <Trash2 className="h-4 w-4" />
           </Button>
 
+          {/* 导出按钮 — 始终可点击 */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportClick}
+            className="gap-1.5"
+            title="导出网络请求"
+          >
+            <Download className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
@@ -910,43 +952,44 @@ export function AndroidNetworkCapturePage(): React.JSX.Element {
           />
         </Card>
       ) : (
-        <div id="android-capture-container" className="flex-1 flex min-h-0 relative gap-1">
-          <Card className="min-w-0 flex flex-col" style={{ width: `${leftPanelWidth}%` }}>
-            <NetworkRequestTable
-              requests={requests}
-              selectedRequest={selectedRequest}
-              onSelectRequest={setSelectedRequest}
-              searchQuery={searchQuery}
-              searchMatches={searchMatches}
-              isFilterMode={isFilterMode}
-              isRegexMode={isRegexMode}
-              autoScrollEnabled={autoScrollEnabled}
-              setAutoScrollEnabled={setAutoScrollEnabled}
-              onClearAll={handleClearAllRequests}
-              showExportCheckboxes
-              selectedIds={selectedIds}
-              onToggleSelect={handleToggleSelect}
-              onToggleSelectAll={handleToggleSelectAll}
-              onExportRequests={handleExportRequests}
-              onDeleteRequests={handleDeleteRequests}
-              onMockRequest={handleMockSingleRequest}
-            />
-          </Card>
-
-          <div
-            className="w-2 cursor-col-resize flex-shrink-0 z-10 hover:bg-primary/20 transition-colors"
-            onMouseDown={() => setIsResizing(true)}
-          />
-
-          <Card className="min-w-0 flex flex-col flex-1 overflow-hidden">
-            <NetworkRequestDetail
-              request={selectedRequest}
-              searchQuery={searchQuery}
-              searchMatches={searchMatches}
-              isRegexMode={isRegexMode}
-            />
-          </Card>
-        </div>
+        <CollapsibleSplitPane
+          className="flex-1"
+          left={(controls) => (
+            <Card className="h-full min-w-0 flex flex-col overflow-hidden">
+              <NetworkRequestTable
+                requests={requests}
+                selectedRequest={selectedRequest}
+                onSelectRequest={setSelectedRequest}
+                searchQuery={searchQuery}
+                searchMatches={searchMatches}
+                isFilterMode={isFilterMode}
+                isRegexMode={isRegexMode}
+                autoScrollEnabled={autoScrollEnabled}
+                setAutoScrollEnabled={setAutoScrollEnabled}
+                onClearAll={handleClearAllRequests}
+                showExportCheckboxes
+                selectedIds={selectedIds}
+                onToggleSelect={handleToggleSelect}
+                onToggleSelectAll={handleToggleSelectAll}
+                onExportRequest={handleExportSingleRequest}
+                onDeleteRequest={handleDeleteSingleRequest}
+                onMockRequest={handleMockSingleRequest}
+                onCollapsePanel={controls.collapseLeft}
+              />
+            </Card>
+          )}
+          right={(controls) => (
+            <Card className="h-full min-w-0 flex flex-col overflow-hidden">
+              <NetworkRequestDetail
+                request={selectedRequest}
+                searchQuery={searchQuery}
+                searchMatches={searchMatches}
+                isRegexMode={isRegexMode}
+                onCollapsePanel={controls.collapseRight}
+              />
+            </Card>
+          )}
+        />
       )}
 
       {/* 底部状态栏 */}

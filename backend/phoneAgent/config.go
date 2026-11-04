@@ -4,10 +4,11 @@ package phoneAgent
 type LLMProvider string
 
 const (
-	// ProviderZhipuAI 智谱AI
-	ProviderZhipuAI LLMProvider = "zhipu"
-	// ProviderOpenAI OpenAI
-	ProviderOpenAI LLMProvider = "openai"
+	ProviderZhipuAI    LLMProvider = "zhipu"
+	ProviderOpenAI     LLMProvider = "openai"
+	ProviderDeepSeek   LLMProvider = "deepseek"
+	ProviderOpenRouter LLMProvider = "openrouter"
+	ProviderCustom     LLMProvider = "custom"
 )
 
 // LLMConfig LLM配置

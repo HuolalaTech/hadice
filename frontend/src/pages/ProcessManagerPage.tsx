@@ -78,7 +78,7 @@ function formatMem(size: string): string {
 function getStateDescription(state: string): { label: string; color: string } {
   switch (state) {
     case 'R':
-      return { label: '运行', color: 'text-green-500' }
+      return { label: '运行', color: 'text-green-700 dark:text-green-400' }
     case 'S':
       return { label: '睡眠', color: 'text-blue-500' }
     case 'D':
@@ -604,7 +604,7 @@ export function ProcessManagerPage(): React.JSX.Element {
         {/* 统计卡片 */}
         <div className="flex items-center gap-2">
           <StatCard icon={Activity} label="总计" value={stats.total} color="text-foreground" />
-          <StatCard icon={Zap} label="运行" value={stats.running} color="text-green-500" />
+          <StatCard icon={Zap} label="运行" value={stats.running} color="text-green-700 dark:text-green-400" />
           <StatCard icon={Clock} label="睡眠" value={stats.sleeping} color="text-blue-500" />
           <StatCard icon={Skull} label="僵尸" value={stats.zombie} color="text-red-500" />
         </div>

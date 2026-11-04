@@ -4,9 +4,16 @@ import { cn } from '@/lib/utils'
 import { captureEvent } from '@/lib/posthog'
 import { getMenuItem } from '@/constants/menu'
 import { usePanelStore } from '@/store/panelStore'
+import { useDeviceStore } from '@/store/deviceStore'
 import { usePageContext } from '@/contexts/PageContext'
 import * as BackendApp from '../../../bindings/Hadice/backend/appservice'
 import { EventsEmit, EventsOn } from '../../../wailsjs/runtime/runtime'
+import {
+  SHELL_FLUSH_EVENT,
+  useShellSessionStore
+} from '@/store/shellSessionStore'
+import { SHELL_HANDOFF_EVENT } from '@/lib/shell-handoff'
+import { isHdcAvailable } from '@/lib/hdc'
 import {
   Tooltip,
   TooltipContent,
@@ -43,22 +50,62 @@ export function WindowToggleButton(): React.JSX.Element | null {
     }
   }, [menuId, standalone, setPanelOpen, refreshPanelState])
 
+  const flushShellIfNeeded = async () => {
+    const empty = useShellSessionStore.getState().toBackendState()
+    if (menuId !== 'hdc-shell' || !isHdcAvailable()) return empty
+    window.dispatchEvent(new Event(SHELL_FLUSH_EVENT))
+    await new Promise<void>((resolve) => setTimeout(resolve, 80))
+    const state = useShellSessionStore.getState().toBackendState()
+    // 逐个写快照，避免整包 map 在绑定层丢失
+    await Promise.all(
+      Object.entries(state.snapshots).map(([id, snap]) =>
+        snap ? window.hdc.setShellSnapshot(id, snap) : Promise.resolve()
+      )
+    )
+    await window.hdc.setShellUIState(state)
+    return state
+  }
+
   const handleOpenInPanel = async () => {
     try {
-      await BackendApp.OpenPanelWindow(menuId, menuItem?.label ?? menuId)
+      await flushShellIfNeeded()
+      // 系统日志：先停主窗残留流，避免无监听时 hilog 事件打满队列导致独立窗空白
+      if (menuId === 'system-logs') {
+        await Promise.all([
+          BackendApp.StopAllHilogStreams().catch(() => {}),
+          BackendApp.StopAllLogcatStreams().catch(() => {}),
+        ])
+      }
       setPanelOpen(menuId, true)
+      await new Promise<void>((resolve) => setTimeout(resolve, 50))
+      const deviceKey =
+        useDeviceStore.getState().selectedDevice?.connectKey ?? ''
+      await BackendApp.OpenPanelWindowWithDevice(
+        menuId,
+        menuItem?.label ?? menuId,
+        deviceKey
+      )
       captureEvent('window toggled standalone', { action: 'open', page: menuId })
     } catch (err) {
+      setPanelOpen(menuId, false)
       console.error('[WindowToggleButton] OpenPanelWindow failed:', err)
     }
   }
 
   const handleClosePanel = async () => {
     try {
-      EventsEmit('navigateToPage', menuId)
+      const state = await flushShellIfNeeded()
+      // 先广播给主窗内存，再关窗（主窗 Get 可能仍读到旧值）
+      if (menuId === 'hdc-shell') {
+        EventsEmit(SHELL_HANDOFF_EVENT, state)
+        await new Promise<void>((resolve) => setTimeout(resolve, 30))
+      }
       await BackendApp.ClosePanelWindow(menuId)
+      EventsEmit('navigateToPage', menuId)
       setPanelOpen(menuId, false)
-      refreshPanelState()
+      window.setTimeout(() => {
+        void refreshPanelState()
+      }, 150)
       onNavigateTo?.(menuId)
       captureEvent('window toggled standalone', { action: 'close', page: menuId })
     } catch (err) {

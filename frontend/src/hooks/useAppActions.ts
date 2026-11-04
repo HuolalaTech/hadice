@@ -82,6 +82,30 @@ export function useAppActions(onRefresh: () => Promise<void>) {
     }
   }, [selectedDevice, onRefresh])
 
+  // 导出应用安装包
+  const exportApp = useCallback(async (app: AppInfo) => {
+    if (!selectedDevice || !isHdcAvailable()) {
+      return { success: false, error: '未连接设备' }
+    }
+    try {
+      const result = await window.hdc.exportApp(
+        selectedDevice.connectKey,
+        app.packageName,
+        selectedDevice.platform
+      )
+      if (result.success) {
+        captureEvent('app exported', {
+          package_name: app.packageName,
+          platform: selectedDevice.platform || 'harmonyos'
+        })
+      }
+      return result
+    } catch (error) {
+      console.error('[useAppActions] Export app error:', error)
+      return { success: false, error: error instanceof Error ? error.message : '导出失败' }
+    }
+  }, [selectedDevice])
+
   // 安装应用
   const installApp = useCallback(async () => {
     if (!selectedDevice || !isHdcAvailable() || isInstalling) return
@@ -135,6 +159,7 @@ export function useAppActions(onRefresh: () => Promise<void>) {
     startApp,
     stopApp,
     executeAction,
+    exportApp,
     installApp
   }
 }

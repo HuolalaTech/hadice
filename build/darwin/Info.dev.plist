@@ -10,11 +10,11 @@
         <key>CFBundleIdentifier</key>
             <string>com.haivo.hadice.dev</string>
         <key>CFBundleVersion</key>
-            <string>2.3.1-dev</string>
+            <string>2.3.10-dev</string>
         <key>CFBundleGetInfoString</key>
             <string>Device Testing and Debugging Tool (Development)</string>
         <key>CFBundleShortVersionString</key>
-            <string>2.3.1-dev</string>
+            <string>2.3.10-dev</string>
         <key>CFBundleIconFile</key>
             <string>icons</string>
         <key>LSMinimumSystemVersion</key>
@@ -23,8 +23,11 @@
             <string>true</string>
         <key>NSHumanReadableCopyright</key>
             <string>© 2026, Haivo</string>
+        <!-- 网页看看：除局域网外，也允许 WebView 加载 http://公网IP（系统浏览器默认允许，WKWebView 默认拒绝） -->
         <key>NSAppTransportSecurity</key>
         <dict>
+            <key>NSAllowsArbitraryLoadsInWebContent</key>
+            <true/>
             <key>NSAllowsLocalNetworking</key>
             <true/>
         </dict>

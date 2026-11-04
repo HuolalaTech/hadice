@@ -54,3 +54,35 @@ export function buildNetworkRequestUrl(request: NetworkRequest): string {
 export function escapeRegexLiteral(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
+
+/** 列表/收藏展示用：能解则解，非法 % 序列原样返回 */
+export function decodeNetworkUrlForDisplay(s: string): string {
+  if (!s || s === '-') return s
+  try {
+    return decodeURIComponent(s)
+  } catch {
+    try {
+      return decodeURI(s)
+    } catch {
+      return s
+    }
+  }
+}
+
+/**
+ * 收藏键：完整展示 URL 去掉 hash，再截到第一个 `&` 之前
+ *（保留 path + 首个 query 参数，如 `/?_m=xxx`；后续 token/device 等丢掉），再 URL 解码。
+ * 空 / '-' / 剥完为空 → ''。
+ */
+export function stripUrlForFavorite(input: NetworkRequest | string): string {
+  const raw =
+    typeof input === 'string' ? input.trim() : buildNetworkRequestUrl(input).trim()
+  if (!raw || raw === '-') return ''
+
+  const hashIndex = raw.indexOf('#')
+  const withoutHash = hashIndex >= 0 ? raw.slice(0, hashIndex) : raw
+  const ampIndex = withoutHash.indexOf('&')
+  const base = (ampIndex >= 0 ? withoutHash.slice(0, ampIndex) : withoutHash).trim()
+  if (!base) return ''
+  return decodeNetworkUrlForDisplay(base)
+}

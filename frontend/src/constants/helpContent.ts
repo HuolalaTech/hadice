@@ -28,6 +28,76 @@ export interface HelpContent {
 }
 
 export const helpContentMap: Record<MenuItemId, HelpContent> = {
+  'web-peek': {
+    description:
+      '网页看看：在应用内用独立 WebView 真导航打开链接（不受禁嵌影响），默认桌面尺寸；可用悬浮工具条切移动端视口、DevTools、系统浏览器。本面板支持「独立窗口打开」与「帮助」。历史存本机 localStorage。',
+    sections: [
+      {
+        title: '基本用法',
+        content: [
+          '1. 标题旁按钮：独立窗口打开本面板；「?」打开本页帮助',
+          '2. 输入网址 →「应用内打开」→ 内容窗（默认 PC）+ 右上角悬浮工具条',
+          '3. 工具条默认收起；展开后切机型/打开等会立即再收起；切到其它 App 时自动隐藏',
+          '4. 「DevTools」/「系统浏览器」；内容窗快捷键 Ctrl+Shift+B、F12',
+          '5. 历史可再次打开或删除 / 清空'
+        ],
+        isList: true
+      },
+      {
+        title: '限制说明',
+        content:
+          '仅 http/https。内容为独立 WebView 真导航（非 iframe）。macOS WebContent 允许明文 http。正式包 macOS Inspector 可能不可用。最多 30 条历史。'
+      }
+    ],
+    faqs: [
+      {
+        question: '本面板和内容窗有什么区别？',
+        answer:
+          '本面板用来输入地址、看历史，可像其它功能一样独立窗口打开。内容窗是真正加载网页的 WebView；悬浮工具条贴在内容窗右上角。'
+      },
+      {
+        question: '系统浏览器能开、Hadice 打不开 http://IP？',
+        answer:
+          '多为 macOS ATS：WKWebView 默认禁明文 http。需使用开启 NSAllowsArbitraryLoadsInWebContent 的构建；改 Info.plist 后请完整重启/重装应用。'
+      }
+    ]
+  },
+  'handy-tools': {
+    description: '与设备无关的离线小工具集合：JSON、Diff、简易 Postman、正则、编码/哈希、颜色、二维码、Crontab、随机密码、UUID/ID 生成、时间戳。二维码解码支持手动选择、Ctrl+V 粘贴、拖拽图片。各工具最后输入存 localStorage。',
+    sections: [
+      { title: '基本用法', content: ['1. 左侧选工具，右侧直接操作', '2. 简易 Postman 经 Go 后端转发绕过 WebView CORS，仅 http/https、30s 超时、响应截断 2MB', '3. 二维码解码为本地图片解析，不上传'], isList: true },
+      { title: '限制说明', content: 'Diff 为行级 LCS，超 2000 行停止；Crontab 逐分钟扫描未来 1 年求下 5 次执行。' }
+    ],
+    faqs: [{ question: '数据会上传吗？', answer: '除简易 Postman 主动发送的请求外，全部本地处理；输入仅存本机 localStorage。' }]
+  },
+  'app-layout': {
+    description:
+      '应用布局可选择已安装应用的 Ability/Activity，启动后抓取当前页控件树，并在截图上高亮选中节点。',
+    sections: [
+      {
+        title: '基本用法',
+        content: [
+          '1. 左侧选择应用，再选 Ability（鸿蒙）或 Activity（安卓）',
+          '2. 点「启动并抓取」：先拉起页面，再 dump 布局树并截图',
+          '3. 或先手动打开目标页，点「抓取当前前台页」',
+          '4. 点击树节点可在截图上显示红色 bounds 框'
+        ],
+        isList: true
+      },
+      {
+        title: '限制说明',
+        content:
+          '依赖系统 Accessibility / uitest，Flutter、自绘 Canvas、游戏、部分 WebView 可能树不完整。安全窗可能 dump 失败。'
+      }
+    ],
+    faqs: [
+      {
+        question: '如何从正式版去掉本功能？',
+        answer:
+          '将 frontend/src/modules/appLayout/enabled.ts 中 APP_LAYOUT_ENABLED 设为 false；或删除 modules/appLayout、AppLayoutPage、backend/applayout、app_applayout.go 并去掉菜单项。'
+      }
+    ]
+  },
   'device-overview': {
     description:
       '设备总览页面提供已连接设备的全局视图，展示设备基本信息、系统存储、电池状态等关键数据。',
@@ -154,6 +224,20 @@ export const helpContentMap: Record<MenuItemId, HelpContent> = {
       {
         title: '选择文件安装',
         content: '点击"选择文件"按钮，在文件对话框中选择要安装的安装包文件。'
+      },
+      {
+        title: '链接安装',
+        content:
+          '支持输入 HTTP/HTTPS 安装包链接（含 OSS/CDN 签名参数，如 ?Expires=…&Signature=…），也可在「安装包链接」面板按 ⌘V / Ctrl+V 粘贴二维码图片，识别出链接后自动下载安装。Android 支持 .apk，以及包含 apk 的 .zip/.gz/.tar 等压缩包（会自动解压检测）；HarmonyOS 支持 .hap、.hsp、.har、.zip、.gz、.7z、.tar 等。路径无后缀时，会按响应头 Content-Disposition 或重定向后的最终地址识别文件名。点击「下载并解析」后会自动安装，过程中按钮变为圆形加载，页面其余操作仍可用。制品站 301/302 到对象存储的地址会自动跟随。'
+      },
+      {
+        title: '安装历史',
+        content: [
+          '右上角「安装历史」会收起安装区并展开完整列表，点历史面板上的「关闭」可还原。历史仅按 Android 和 HarmonyOS 两个平台分类，每个平台最多保留 50 条。',
+          '本地安装只记录原文件路径，不拷贝缓存；原文件删除后无法重新安装。',
+          '链接安装会缓存下载包，重新安装不二次下载；删除/清空历史时会回收无引用的链接缓存。'
+        ],
+        isList: true
       }
     ],
     faqs: [
@@ -345,6 +429,50 @@ export const helpContentMap: Record<MenuItemId, HelpContent> = {
         answer:
           'Mock 功能仅 Sophon 模式支持。请确认：\n• 已切换到 Sophon 模式\n• 规则已勾选"启用此规则"\n• URL 匹配规则正确（可使用正则表达式）\n• 抓包功能处于开启状态'
       },
+    ]
+  },
+
+  'track-log': {
+    description:
+      '数据埋点（鸿蒙 / 安卓统一面板）：接收 Debug 包埋点镜像（左 event 名 / 右 JSON）。不走抓包，也不依赖外部日志站。',
+    sections: [
+      {
+        title: '使用步骤',
+        content: [
+          '1. 开始监听前可改端口（默认 8888）；点「开始监听」后本机打开 ws://127.0.0.1:端口/ws/log',
+          '2. Debug 包调试页打开「埋点镜像」，host 填 127.0.0.1:同一端口',
+          '3. USB 已连接时自动反转设备该端口（鸿蒙 hdc rport / 安卓 adb reverse）',
+          '4. 操作 APP，左侧出现埋点名，右侧看 JSON，可复制节点'
+        ],
+        isList: true
+      },
+      {
+        title: '和抓包的区别',
+        content:
+          '抓包页不负责埋点。本页吃 APP 已有镜像通道（method=TRACK），鸿蒙与安卓共用同一套面板。'
+      }
+    ],
+    faqs: [
+      {
+        question: '为什么一直空？',
+        answer:
+          '确认：Hadice 已开始监听；APP 是 Debug 包且打开了埋点镜像；host 是 127.0.0.1:8888；状态栏「设备连接」大于 0。若刚改绑/重开监听，多数 Debug 包不会自动重连，需开关埋点镜像或重启 APP。'
+      },
+      {
+        question: '改绑设备后要重启 APP 吗？',
+        answer:
+          '正常。Hadice 只负责本机 8888 与端口反转；APP 侧 WebSocket 一般在启动/打开镜像时连一次。改绑会断旧连接，请看状态栏「设备连接」：为 0 就开关镜像或重启 APP。'
+      },
+      {
+        question: '端口被占用？',
+        answer:
+          '默认 8888。被占用时可在开始监听前改端口，或关掉本机其它占用该端口的埋点/日志工具；APP host 须与所选端口一致。'
+      },
+      {
+        question: '为什么有的埋点只有名称、右侧是空 {}？',
+        answer:
+          '若名称像接口名（如 consignee_order_entrance），多半是业务 API 的 ?_m= 被误收；现已只认 method=TRACK / 旧 sensors.track.local。真埋点右侧应有 event/properties。仍空时控制台搜 [TrackLog] empty data。'
+      }
     ]
   },
 

@@ -27,6 +27,8 @@ export function useFilterPipeline() {
 
     worker.onmessage = (e) => {
       if (e.data.type === 'filter_result') {
+        // 过期请求（清空后）丢弃，避免旧快照写回列表
+        if (e.data.requestId !== requestIdRef.current) return;
         setState({
           filteredEntries: e.data.entries,
           stats: e.data.stats,
@@ -63,11 +65,22 @@ export function useFilterPipeline() {
     []
   );
 
+  /** 同步清空列表快照（作废进行中的 Worker 结果） */
+  const clearFiltered = useCallback(() => {
+    requestIdRef.current += 1;
+    setState({
+      filteredEntries: [],
+      stats: null,
+      pending: false,
+    });
+  }, []);
+
   return {
     filteredEntries: state.filteredEntries,
     stats: state.stats,
     pending: state.pending,
     updateConfig,
     filterEntries,
+    clearFiltered,
   };
 }

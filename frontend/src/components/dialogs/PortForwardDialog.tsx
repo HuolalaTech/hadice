@@ -369,7 +369,7 @@ export function PortForwardDialog({
                                 {isApplying ? (
                                   <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : (
-                                  <Check className="h-4 w-4 text-green-600" />
+                                  <Check className="h-4 w-4 text-green-700 dark:text-green-400" />
                                 )}
                               </Button>
                               <Button
@@ -436,7 +436,7 @@ export function PortForwardDialog({
               <div
                 className={`p-3 rounded-md text-sm ${
                   testResult.success
-                    ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+                    ? 'bg-green-700/15 text-green-700 dark:bg-green-500/20 dark:text-green-400'
                     : 'bg-red-500/10 text-red-600 dark:text-red-400'
                 }`}
               >

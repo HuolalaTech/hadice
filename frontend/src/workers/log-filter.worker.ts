@@ -50,12 +50,22 @@ interface FilterStage {
 
 // ── Stage 1: Level Filter ────────────────────────────────────────────────────
 
+function normalizeLevel(level: string): string {
+  const cleaned = String(level || '')
+    .replace(/\x1b\[[0-9;]*m/g, '')
+    .trim()
+    .toUpperCase()
+  const m = cleaned.match(/[VDIWEF]/)
+  return m ? m[0] : cleaned.slice(0, 1)
+}
+
 const levelFilter: FilterStage = {
   name: 'levelFilter',
   priority: 10,
   apply(entries, config) {
     if (!config.levelFilter || config.levelFilter.length === 0) return entries
-    return entries.filter((e) => config.levelFilter.includes(e.level as LogLevel))
+    const allowed = new Set(config.levelFilter.map((l) => normalizeLevel(String(l))))
+    return entries.filter((e) => allowed.has(normalizeLevel(e.level)))
   },
 }
 

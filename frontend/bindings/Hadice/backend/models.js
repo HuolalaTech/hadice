@@ -9,6 +9,9 @@ import { Create as $Create } from "@wailsio/runtime";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as device$0 from "./device/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as hdc$0 from "./hdc/models.js";
 
 export class CommandResult {
     /**
@@ -90,6 +93,115 @@ export class DisplaySize {
     }
 }
 
+export class HandyHTTPResponse {
+    /**
+     * Creates a new HandyHTTPResponse instance.
+     * @param {Partial<HandyHTTPResponse>} [$$source = {}] - The source object to create the HandyHTTPResponse.
+     */
+    constructor($$source = {}) {
+        if (!("status" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["status"] = 0;
+        }
+        if (!("statusText" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["statusText"] = "";
+        }
+        if (!("headers" in $$source)) {
+            /**
+             * @member
+             * @type {{ [_ in string]?: string }}
+             */
+            this["headers"] = {};
+        }
+        if (!("body" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["body"] = "";
+        }
+        if (!("elapsedMs" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["elapsedMs"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new HandyHTTPResponse instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {HandyHTTPResponse}
+     */
+    static createFrom($$source = {}) {
+        const $$createField2_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("headers" in $$parsedSource) {
+            $$parsedSource["headers"] = $$createField2_0($$parsedSource["headers"]);
+        }
+        return new HandyHTTPResponse(/** @type {Partial<HandyHTTPResponse>} */($$parsedSource));
+    }
+}
+
+export class HandyImageFile {
+    /**
+     * Creates a new HandyImageFile instance.
+     * @param {Partial<HandyImageFile>} [$$source = {}] - The source object to create the HandyImageFile.
+     */
+    constructor($$source = {}) {
+        if (!("name" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["name"] = "";
+        }
+        if (!("mime" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["mime"] = "";
+        }
+        if (!("size" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["size"] = 0;
+        }
+        if (!("dataUrl" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["dataUrl"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new HandyImageFile instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {HandyImageFile}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new HandyImageFile(/** @type {Partial<HandyImageFile>} */($$parsedSource));
+    }
+}
+
 /**
  * HttpExtra HTTP Extra信息
  */
@@ -139,6 +251,62 @@ export class HttpExtra {
     static createFrom($$source = {}) {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new HttpExtra(/** @type {Partial<HttpExtra>} */($$parsedSource));
+    }
+}
+
+export class InstallAttemptResult {
+    /**
+     * Creates a new InstallAttemptResult instance.
+     * @param {Partial<InstallAttemptResult>} [$$source = {}] - The source object to create the InstallAttemptResult.
+     */
+    constructor($$source = {}) {
+        if (!("success" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["success"] = false;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["output"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["error"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["historyWarning"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["cachedPath"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new InstallAttemptResult instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {InstallAttemptResult}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new InstallAttemptResult(/** @type {Partial<InstallAttemptResult>} */($$parsedSource));
     }
 }
 
@@ -429,6 +597,45 @@ export class PortForwardStatus {
     }
 }
 
+export class PreparedInstallPackage {
+    /**
+     * Creates a new PreparedInstallPackage instance.
+     * @param {Partial<PreparedInstallPackage>} [$$source = {}] - The source object to create the PreparedInstallPackage.
+     */
+    constructor($$source = {}) {
+        if (!("filePath" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["filePath"] = "";
+        }
+        if (!("info" in $$source)) {
+            /**
+             * @member
+             * @type {hdc$0.InstallPackageInfo | null}
+             */
+            this["info"] = null;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new PreparedInstallPackage instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {PreparedInstallPackage}
+     */
+    static createFrom($$source = {}) {
+        const $$createField1_0 = $$createType5;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("info" in $$parsedSource) {
+            $$parsedSource["info"] = $$createField1_0($$parsedSource["info"]);
+        }
+        return new PreparedInstallPackage(/** @type {Partial<PreparedInstallPackage>} */($$parsedSource));
+    }
+}
+
 export class ProcessInfoUI {
     /**
      * Creates a new ProcessInfoUI instance.
@@ -564,8 +771,8 @@ export class ProcessListResult {
      * @returns {ProcessListResult}
      */
     static createFrom($$source = {}) {
-        const $$createField0_0 = $$createType4;
-        const $$createField1_0 = $$createType6;
+        const $$createField0_0 = $$createType6;
+        const $$createField1_0 = $$createType8;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("stats" in $$parsedSource) {
             $$parsedSource["stats"] = $$createField0_0($$parsedSource["stats"]);
@@ -630,6 +837,189 @@ export class ProcessStats {
     static createFrom($$source = {}) {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new ProcessStats(/** @type {Partial<ProcessStats>} */($$parsedSource));
+    }
+}
+
+/**
+ * ShellTabInfo 前端终端 Tab（跨主窗/独立窗共享）。
+ */
+export class ShellTabInfo {
+    /**
+     * Creates a new ShellTabInfo instance.
+     * @param {Partial<ShellTabInfo>} [$$source = {}] - The source object to create the ShellTabInfo.
+     */
+    constructor($$source = {}) {
+        if (!("id" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["id"] = "";
+        }
+        if (!("title" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["title"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ShellTabInfo instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {ShellTabInfo}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ShellTabInfo(/** @type {Partial<ShellTabInfo>} */($$parsedSource));
+    }
+}
+
+/**
+ * ShellUIState 终端 UI 状态：tabs + xterm serialize 快照。
+ * ponytail: 存在 Go 进程内存，因 Wails 双 WebView 不共享 localStorage。
+ */
+export class ShellUIState {
+    /**
+     * Creates a new ShellUIState instance.
+     * @param {Partial<ShellUIState>} [$$source = {}] - The source object to create the ShellUIState.
+     */
+    constructor($$source = {}) {
+        if (!("tabs" in $$source)) {
+            /**
+             * @member
+             * @type {ShellTabInfo[]}
+             */
+            this["tabs"] = [];
+        }
+        if (!("activeTabId" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["activeTabId"] = "";
+        }
+        if (!("tabSeq" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["tabSeq"] = 0;
+        }
+        if (!("snapshots" in $$source)) {
+            /**
+             * @member
+             * @type {{ [_ in string]?: string }}
+             */
+            this["snapshots"] = {};
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ShellUIState instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {ShellUIState}
+     */
+    static createFrom($$source = {}) {
+        const $$createField0_0 = $$createType10;
+        const $$createField3_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("tabs" in $$parsedSource) {
+            $$parsedSource["tabs"] = $$createField0_0($$parsedSource["tabs"]);
+        }
+        if ("snapshots" in $$parsedSource) {
+            $$parsedSource["snapshots"] = $$createField3_0($$parsedSource["snapshots"]);
+        }
+        return new ShellUIState(/** @type {Partial<ShellUIState>} */($$parsedSource));
+    }
+}
+
+export class TrackLogStatus {
+    /**
+     * Creates a new TrackLogStatus instance.
+     * @param {Partial<TrackLogStatus>} [$$source = {}] - The source object to create the TrackLogStatus.
+     */
+    constructor($$source = {}) {
+        if (!("running" in $$source)) {
+            /**
+             * @member
+             * @type {boolean}
+             */
+            this["running"] = false;
+        }
+        if (!("port" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["port"] = 0;
+        }
+        if (!("hostHint" in $$source)) {
+            /**
+             * @member
+             * @type {string}
+             */
+            this["hostHint"] = "";
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["deviceId"] = undefined;
+        }
+        if (!("clientCount" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["clientCount"] = 0;
+        }
+        if (!("eventCount" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["eventCount"] = 0;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {number | undefined}
+             */
+            this["received"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {number | undefined}
+             */
+            this["parsed"] = undefined;
+        }
+        if (/** @type {any} */(false)) {
+            /**
+             * @member
+             * @type {string | undefined}
+             */
+            this["error"] = undefined;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new TrackLogStatus instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {TrackLogStatus}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new TrackLogStatus(/** @type {Partial<TrackLogStatus>} */($$parsedSource));
     }
 }
 
@@ -764,6 +1154,10 @@ const $$createType0 = $Create.Map($Create.Any, $Create.Any);
 const $$createType1 = HttpExtra.createFrom;
 const $$createType2 = $Create.Nullable($$createType1);
 const $$createType3 = $Create.Map($Create.Any, $Create.Any);
-const $$createType4 = ProcessStats.createFrom;
-const $$createType5 = ProcessInfoUI.createFrom;
-const $$createType6 = $Create.Array($$createType5);
+const $$createType4 = hdc$0.InstallPackageInfo.createFrom;
+const $$createType5 = $Create.Nullable($$createType4);
+const $$createType6 = ProcessStats.createFrom;
+const $$createType7 = ProcessInfoUI.createFrom;
+const $$createType8 = $Create.Array($$createType7);
+const $$createType9 = ShellTabInfo.createFrom;
+const $$createType10 = $Create.Array($$createType9);

@@ -15,6 +15,11 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { useDeviceStore } from '@/store/deviceStore'
 import { useAppCacheStore } from '@/store/appCacheStore'
 import { useLogViewStore } from '@/store/logViewStore'
+import { useLogSelectedAppsStore } from '@/store/logSelectedAppsStore'
+import {
+  hydrateLogApps,
+  refreshLogAppsPids,
+} from '@/lib/log-selected-apps'
 import { AppMultiSelect } from '@/components/app/AppMultiSelect'
 import { LogViewToggle } from '@/components/log/LogViewToggle'
 import { LogListView } from '@/components/log/LogListView'
@@ -33,6 +38,10 @@ import { captureEvent } from '@/lib/posthog'
 import { useLogStream } from '@/hooks/useLogStream'
 import { getTerminalTheme } from '@/lib/theme'
 import { useThemeStore } from '@/store/themeStore'
+import { usePageContext } from '@/contexts/PageContext'
+import { usePanelStore } from '@/store/panelStore'
+import { shouldStopLogStreamOnUnmount } from '@/lib/log-stream-ownership'
+import { isTerminalHostReady } from '@/lib/terminal-ready'
 
 type HarmonyLogLevel = 'D' | 'I' | 'W' | 'E' | 'F'
 
@@ -145,6 +154,14 @@ export function SystemLogsPage(): React.JSX.Element {
   const { selectedDevice } = useDeviceStore()
   const { appsArray, loadAppsIfNeeded } = useAppCacheStore()
   const viewMode = useLogViewStore((s) => s.viewMode)
+  const pageCtx = usePageContext()
+  const panelOpenForLogs = usePanelStore(
+    (s) => s.panelOpenMap['system-logs'] ?? false
+  )
+  const stopBackendOnUnmount = shouldStopLogStreamOnUnmount({
+    standalone: pageCtx?.standalone ?? false,
+    panelOpenForLogs,
+  })
 
   const platform = useMemo(() => {
     return selectedDevice?.platform === 'android' ? 'android' : 'harmonyos'
@@ -157,29 +174,43 @@ export function SystemLogsPage(): React.JSX.Element {
   const [keywordFilter, setKeywordFilter] = useState('')
   const [useRegex, setUseRegex] = useState(false)
   const [androidApps, setAndroidApps] = useState<Array<{ packageName: string; appName: string; pid?: number }>>([])
+  const setAppsForDevice = useLogSelectedAppsStore((s) => s.setForDevice)
+  const getAppsForDevice = useLogSelectedAppsStore((s) => s.getForDevice)
+  const [appsStoreReady, setAppsStoreReady] = useState(() =>
+    useLogSelectedAppsStore.persist.hasHydrated()
+  )
+  useEffect(() => {
+    setAppsStoreReady(useLogSelectedAppsStore.persist.hasHydrated())
+    return useLogSelectedAppsStore.persist.onFinishHydration(() => {
+      setAppsStoreReady(true)
+    })
+  }, [])
 
   // ── Terminal refs ──────────────────────────────────────────────────────────
   const terminalRef = useRef<HTMLDivElement>(null)
   const terminalInstanceRef = useRef<Terminal | null>(null)
   const theme = useThemeStore((s) => s.theme)
 
-  // ── Derive backend / client filters ────────────────────────────────────────
+  // 级别走前端过滤（不重启 hilog）；PID 仍走后端（会重启流）
   const backendFilters = useMemo(() => {
     const pids = selectedApps
       .filter((app) => app.pid !== undefined && app.pid > 0)
       .map((app) => String(app.pid))
-    return { levels: levelFilter, pids }
-  }, [levelFilter, selectedApps])
+    return { pids }
+  }, [selectedApps])
 
-  const clientFilters = useMemo(() => ({
-    keywordFilter,
-    useRegex,
-    tagFilter,
-  }), [keywordFilter, useRegex, tagFilter])
+  const clientFilters = useMemo(
+    () => ({
+      levels: levelFilter,
+      keywordFilter,
+      useRegex,
+      tagFilter,
+    }),
+    [levelFilter, keywordFilter, useRegex, tagFilter]
+  )
 
   // ── useLogStream hook ──────────────────────────────────────────────────────
   const {
-    isStreaming,
     isPaused,
     autoScroll,
     setAutoScroll,
@@ -197,31 +228,23 @@ export function SystemLogsPage(): React.JSX.Element {
     backendFilters,
     clientFilters,
     ringBufferCapacity: 100_000,
+    stopBackendOnUnmount,
   })
 
   // ── Terminal initialization ────────────────────────────────────────────────
+  // 独立窗首帧容器常为 0×0；此时 open 会导致空白，点「终端/列表」重建后才正常。
+  // 等 clientWidth/Height > 0 再 open + fit。
   useEffect(() => {
-    if (!terminalRef.current || viewMode !== 'terminal') return
+    if (viewMode !== 'terminal') return
 
-    const terminal = new Terminal({
-      theme: getTerminalTheme(useThemeStore.getState().theme),
-      fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-      fontSize: 11,
-      cursorBlink: false,
-      disableStdin: true,
-      scrollback: 10000
-    })
-
-    const fitAddon = new FitAddon()
-    terminal.loadAddon(fitAddon)
-
-    terminal.open(terminalRef.current)
-    terminalInstanceRef.current = terminal
-
-    // Register terminal with the log stream hook
-    setTerminal(terminal)
+    let disposed = false
+    let terminal: Terminal | null = null
+    let fitAddon: FitAddon | null = null
+    let resizeObserver: ResizeObserver | null = null
+    const retryTimers: number[] = []
 
     const fitTerminal = () => {
+      if (!fitAddon || !isTerminalHostReady(terminalRef.current)) return
       try {
         fitAddon.fit()
       } catch (error) {
@@ -229,26 +252,53 @@ export function SystemLogsPage(): React.JSX.Element {
       }
     }
 
-    setTimeout(fitTerminal, 100)
+    const mountTerminal = () => {
+      if (disposed || terminal) return
+      const host = terminalRef.current
+      if (!isTerminalHostReady(host)) return
 
-    const handleResize = () => {
+      terminal = new Terminal({
+        theme: getTerminalTheme(useThemeStore.getState().theme),
+        fontFamily:
+          "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+        fontSize: 11,
+        cursorBlink: false,
+        disableStdin: true,
+        scrollback: 10000,
+      })
+      fitAddon = new FitAddon()
+      terminal.loadAddon(fitAddon)
+      terminal.open(host)
+      terminalInstanceRef.current = terminal
+      setTerminal(terminal)
       fitTerminal()
     }
-    window.addEventListener('resize', handleResize)
 
-    const resizeObserver = new ResizeObserver(() => {
+    const onResize = () => {
+      mountTerminal()
       fitTerminal()
-    })
+    }
+
+    window.addEventListener('resize', onResize)
     if (terminalRef.current) {
+      resizeObserver = new ResizeObserver(onResize)
       resizeObserver.observe(terminalRef.current)
     }
 
+    // 独立窗：布局晚于首帧，短重试几次
+    mountTerminal()
+    for (const ms of [50, 150, 400, 800]) {
+      retryTimers.push(window.setTimeout(onResize, ms))
+    }
+
     return () => {
-      window.removeEventListener('resize', handleResize)
-      resizeObserver.disconnect()
+      disposed = true
+      window.removeEventListener('resize', onResize)
+      resizeObserver?.disconnect()
+      retryTimers.forEach((id) => window.clearTimeout(id))
       setTerminal(null)
       terminalInstanceRef.current = null
-      terminal.dispose()
+      terminal?.dispose()
     }
   }, [setTerminal, viewMode])
 
@@ -268,14 +318,50 @@ export function SystemLogsPage(): React.JSX.Element {
     }
   }, [])
 
+  // 恢复写入后跳过下一次 persist，避免用水合前的 [] 盖掉 localStorage
+  const skipNextAppsPersistRef = useRef(false)
+
+  // 切设备 / persist 水合完成：恢复该设备上次选中的应用（按 connectKey，不串台）
   useEffect(() => {
-    if (!selectedDevice || !isHdcAvailable() || isStreaming) {
+    if (!appsStoreReady) return
+    const key = selectedDevice?.connectKey
+    if (!key) {
+      setSelectedApps([])
       return
     }
+    const catalog = platform === 'android' ? androidApps : appsArray
+    skipNextAppsPersistRef.current = true
+    setSelectedApps(hydrateLogApps(getAppsForDevice(key), catalog))
+    // catalog 到达后由下面 refresh 补 PID；此处故意不依赖 catalog
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appsStoreReady, selectedDevice?.connectKey])
+
+  // 应用列表异步到达 / PID 变化：刷新已选应用的 pid（不改选择集）
+  useEffect(() => {
+    const catalog = platform === 'android' ? androidApps : appsArray
+    setSelectedApps((prev) => refreshLogAppsPids(prev, catalog))
+  }, [platform, androidApps, appsArray])
+
+  // 记住选择（切面板 / 重启 Hadice 后仍在）；水合前不写，避免空数组覆盖 localStorage
+  useEffect(() => {
+    if (!appsStoreReady) return
+    const key = selectedDevice?.connectKey
+    if (!key) return
+    if (skipNextAppsPersistRef.current) {
+      skipNextAppsPersistRef.current = false
+      return
+    }
+    setAppsForDevice(key, selectedApps)
+  }, [appsStoreReady, selectedApps, selectedDevice?.connectKey, setAppsForDevice])
+
+  // 设备变化必须重启流（含独立窗迟到的 device 继承）；勿因 isStreaming 短路
+  useEffect(() => {
+    if (!selectedDevice || !isHdcAvailable()) return
+    if (selectedDevice.status && selectedDevice.status !== 'Connected') return
 
     const timer = setTimeout(() => {
       if (isMountedRef.current) {
-        startStream()
+        void startStream()
       }
     }, 200)
 
@@ -283,7 +369,7 @@ export function SystemLogsPage(): React.JSX.Element {
       clearTimeout(timer)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDevice?.connectKey])
+  }, [selectedDevice?.connectKey, selectedDevice?.platform, selectedDevice?.status])
 
   // ── Fit addon on view mode switch back to terminal ─────────────────────────
   useEffect(() => {

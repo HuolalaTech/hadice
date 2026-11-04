@@ -18,8 +18,13 @@ wails_windows_*.syso
 
 # Local brainstorm / agent tooling
 .superpowers/
+.worktrees/
 .cursor/skills/
 design-system/
+docs/superpowers/
+
+# Local release summary notes (do not commit)
+release-summary-*.md
 
 # Private CI / local secrets (copy from .env.ci.example)
 .env.ci

@@ -22,6 +22,7 @@ import (
 	"Hadice/backend/device"
 	"Hadice/backend/hdc"
 	"Hadice/backend/hiprofiler"
+	"Hadice/backend/installhistory"
 	applogger "Hadice/backend/logger"
 	"Hadice/backend/scrcpy"
 
@@ -62,8 +63,23 @@ func compareVersion(v1, v2 string) int {
 
 // AppService 是 v3 中的服务，提供所有应用功能
 type AppService struct {
-	ctx context.Context
-	app *application.App
+	ctx               context.Context
+	app               *application.App
+	installStore      *installhistory.Store
+	installDownloader *installhistory.Downloader
+}
+
+type PreparedInstallPackage struct {
+	FilePath string                  `json:"filePath"`
+	Info     *hdc.InstallPackageInfo `json:"info"`
+}
+
+type InstallAttemptResult struct {
+	Success        bool   `json:"success"`
+	Output         string `json:"output,omitempty"`
+	Error          string `json:"error,omitempty"`
+	HistoryWarning string `json:"historyWarning,omitempty"`
+	CachedPath     string `json:"cachedPath,omitempty"`
 }
 
 // NewAppService 创建新的应用服务实例
@@ -87,6 +103,19 @@ func (a *AppService) ServiceStartup(ctx context.Context, options application.Ser
 		if _, err := getHadiceOutputDirectory(subdir); err != nil {
 			return err
 		}
+	}
+
+	userDataDir, err := getUserDataDir()
+	if err != nil {
+		return err
+	}
+	a.installStore = installhistory.NewStore(filepath.Join(userDataDir, "install-history"), 50)
+	a.installDownloader = installhistory.NewDownloader(
+		&http.Client{Timeout: 30 * time.Minute},
+		installhistory.MaxDownloadBytes,
+	)
+	if err := a.installStore.CleanupStaging(); err != nil {
+		log.Printf("[Backend] cleanup install staging failed: %v", err)
 	}
 
 	if applogger.Sugar != nil {
@@ -152,36 +181,42 @@ func (a *App) GetAppVersion() string {
 
 // =============== 多窗口管理相关方法 ===============
 
-const panelWindowPrefix = "panel-"
+const (
+	panelWindowPrefix = "panel-"
+	mainWindowName    = "main"
+)
 
-// OpenPanelWindow 在独立窗口中打开指定菜单页
-// menuId: 菜单 ID（如 device-overview）
-// title: 窗口标题
-// 若该菜单的独立窗口已存在，则聚焦显示；否则创建新窗口
-func (a *App) OpenPanelWindow(menuId string, title string) (bool, error) {
-	app := a.app
+func focusMainWindow(app *application.App) {
 	if app == nil {
-		app = application.Get()
+		return
 	}
-	if app == nil {
-		return false, fmt.Errorf("application instance not available")
-	}
-	name := panelWindowPrefix + menuId
-	if win, exists := app.Window.GetByName(name); exists {
+	if win, exists := app.Window.GetByName(mainWindowName); exists {
 		win.Focus()
-		return true, nil
+		return
 	}
-	url := "/?page=" + menuId + "&standalone=1"
-	_ = app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name:             name,
-		Title:            title,
-		URL:              url,
-		Width:            1200,
-		Height:           800,
-		BackgroundColour: application.NewRGBA(27, 38, 54, 255),
-		InitialPosition:  application.WindowCentered,
-	}).Show()
-	return true, nil
+	for _, win := range app.Window.GetAll() {
+		name := win.Name()
+		if name == "" || !strings.HasPrefix(name, panelWindowPrefix) {
+			win.Focus()
+			return
+		}
+	}
+}
+
+func notifyPanelReturnedToMain(menuId string) {
+	app := application.Get()
+	if app == nil {
+		return
+	}
+	// 系统关闭 / ClosePanelWindow 都会走到这里，主窗据此恢复菜单与侧栏
+	app.Event.Emit("navigateToPage", menuId)
+	focusMainWindow(app)
+}
+
+// OpenPanelWindow 在独立窗口中打开指定菜单页（2 参兼容；设备取后端 selectedConnectKey）
+// 新代码请用 OpenPanelWindowWithDevice，避免 selectedConnectKey 未写入时独立窗落到第一台安卓。
+func (a *App) OpenPanelWindow(menuId string, title string) (bool, error) {
+	return a.openPanelWindowInternal(menuId, title, getSelectedConnectKey())
 }
 
 // ClosePanelWindow 关闭指定菜单的独立窗口
@@ -408,6 +443,70 @@ func (a *App) UninstallAppByPlatform(connectKey string, packageName string, plat
 	return hdc.UninstallApp(connectKey, packageName)
 }
 
+// ExportAppByPlatform 导出应用安装包到本机（安卓 APK / 鸿蒙 HAP）
+func (a *App) ExportAppByPlatform(connectKey string, packageName string, platform string) (map[string]interface{}, error) {
+	if a.app == nil {
+		return map[string]interface{}{
+			"success": false,
+			"error":   "应用实例不可用",
+		}, nil
+	}
+	if connectKey == "" || packageName == "" {
+		return map[string]interface{}{
+			"success": false,
+			"error":   "参数无效",
+		}, nil
+	}
+
+	isAndroid := platform == string(device.PlatformAndroid)
+	ext := ".hap"
+	filterName := "鸿蒙安装包"
+	filterPattern := "*.hap;*.hsp"
+	if isAndroid {
+		ext = ".apk"
+		filterName = "安卓安装包"
+		filterPattern = "*.apk"
+	}
+
+	filePath, err := a.app.Dialog.SaveFile().
+		SetMessage("导出应用").
+		SetFilename(packageName+ext).
+		AddFilter(filterName, filterPattern).
+		AddFilter("所有文件", "*.*").
+		PromptForSingleSelection()
+	if err != nil {
+		return map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		}, err
+	}
+	if filePath == "" {
+		return map[string]interface{}{
+			"success":   false,
+			"cancelled": true,
+			"error":     "用户取消",
+		}, nil
+	}
+
+	var savedPath string
+	if isAndroid {
+		savedPath, err = adb.ExportApp(connectKey, packageName, filePath)
+	} else {
+		savedPath, err = hdc.ExportApp(connectKey, packageName, filePath)
+	}
+	if err != nil {
+		return map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		}, nil
+	}
+
+	return map[string]interface{}{
+		"success":  true,
+		"filePath": savedPath,
+	}, nil
+}
+
 // GetOnlineAppInfo 从华为应用市场获取应用信息（名称和图标）
 func (a *App) GetOnlineAppInfo(packageName string) (*hdc.OnlineAppInfo, error) {
 	return hdc.GetOnlineAppInfo(packageName)
@@ -463,7 +562,7 @@ func (a *App) SelectHapFile(connectKey string) (string, error) {
 
 	platform := deviceManager.GetDevicePlatform(connectKey)
 	if platform == device.PlatformAndroid {
-		dialog = dialog.AddFilter("安装包", "*.apk").AddFilter("所有文件", "*.*")
+		dialog = dialog.AddFilter("安装包", "*.apk;*.zip;*.gz;*.7z;*.tar;*.tgz").AddFilter("所有文件", "*.*")
 	} else {
 		dialog = dialog.AddFilter("安装包", "*.hap;*.hsp;*.har;*.zip;*.gz;*.7z;*.tar;*.tgz").AddFilter("所有文件", "*.*")
 	}
@@ -644,16 +743,155 @@ func clearZipTempDir() error {
 	return nil
 }
 
-// extractArchive 解压压缩文件到临时目录（支持ZIP和GZIP）
+// extractArchive 解压压缩文件到临时目录（支持 ZIP / GZIP(tar) / TAR）
 func extractArchive(filePath string, format string) (string, error) {
 	switch format {
 	case "zip":
 		return extractZip(filePath)
 	case "gzip":
 		return extractGzip(filePath)
+	case "tar":
+		return extractTar(filePath)
 	default:
 		return "", fmt.Errorf("不支持的压缩格式: %s", format)
 	}
+}
+
+func resolveArchiveFormat(filePath string) (string, error) {
+	format, err := detectFileFormat(filePath)
+	if err != nil {
+		return "", err
+	}
+	if format == "zip" || format == "gzip" {
+		return format, nil
+	}
+	lowerPath := strings.ToLower(filePath)
+	switch {
+	case strings.HasSuffix(lowerPath, ".tar"):
+		return "tar", nil
+	case strings.HasSuffix(lowerPath, ".tgz"), strings.HasSuffix(lowerPath, ".tar.gz"), strings.HasSuffix(lowerPath, ".gz"):
+		return "gzip", nil
+	case strings.HasSuffix(lowerPath, ".zip"):
+		return "zip", nil
+	case strings.HasSuffix(lowerPath, ".7z"):
+		return "", fmt.Errorf("暂不支持 .7z 解压，请先解压出 .apk/.hap 后再安装")
+	default:
+		return "", fmt.Errorf("无法识别的压缩格式")
+	}
+}
+
+func isAndroidInstallArchive(filePath string) bool {
+	lowerPath := strings.ToLower(filePath)
+	if strings.HasSuffix(lowerPath, ".apk") {
+		return false
+	}
+	for _, extension := range []string{".zip", ".gz", ".7z", ".tar", ".tgz", ".tar.gz"} {
+		if strings.HasSuffix(lowerPath, extension) {
+			return true
+		}
+	}
+	return false
+}
+
+func extractAndFindPackage(filePath string, extension string) (string, error) {
+	format, err := resolveArchiveFormat(filePath)
+	if err != nil {
+		return "", err
+	}
+	extractedDir, err := extractArchive(filePath, format)
+	if err != nil {
+		if strings.Contains(err.Error(), "not a valid zip file") {
+			return "", fmt.Errorf("文件不是有效的压缩包，请检查文件是否损坏或选择正确的文件")
+		}
+		if strings.Contains(err.Error(), "gzip") && strings.Contains(err.Error(), "invalid") {
+			return "", fmt.Errorf("文件不是有效的GZIP压缩包，请检查文件是否损坏或选择正确的文件")
+		}
+		return "", fmt.Errorf("解压文件失败: %v", err)
+	}
+	return findPackageFile(extractedDir, extension)
+}
+
+func findPackageFile(dir string, extension string) (string, error) {
+	var matches []string
+	wantExt := strings.ToLower(extension)
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		baseName := filepath.Base(path)
+		if strings.HasPrefix(baseName, "._") || strings.Contains(path, "__MACOSX") {
+			return nil
+		}
+		if strings.ToLower(filepath.Ext(path)) == wantExt {
+			matches = append(matches, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return "", fmt.Errorf("查找%s文件失败: %v", wantExt, err)
+	}
+	if len(matches) == 0 {
+		return "", fmt.Errorf("在解压文件中未找到有效的%s文件", wantExt)
+	}
+	return matches[0], nil
+}
+
+func findApkFile(dir string) (string, error) {
+	return findPackageFile(dir, ".apk")
+}
+
+func extractTar(tarPath string) (string, error) {
+	if err := clearZipTempDir(); err != nil {
+		return "", fmt.Errorf("清空临时目录失败: %v", err)
+	}
+	userDataDir, err := getUserDataDir()
+	if err != nil {
+		return "", err
+	}
+	tempDir := filepath.Join(userDataDir, "zip")
+	file, err := os.Open(tarPath)
+	if err != nil {
+		return "", fmt.Errorf("打开TAR文件失败: %v", err)
+	}
+	defer file.Close()
+
+	tarReader := tar.NewReader(file)
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", fmt.Errorf("读取TAR文件失败: %v", err)
+		}
+		targetPath := filepath.Join(tempDir, header.Name)
+		if !strings.HasPrefix(targetPath, tempDir+string(os.PathSeparator)) {
+			continue
+		}
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(targetPath, os.FileMode(header.Mode)); err != nil {
+				return "", fmt.Errorf("创建目录失败 %s: %v", targetPath, err)
+			}
+		case tar.TypeReg:
+			if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+				return "", fmt.Errorf("创建父目录失败 %s: %v", filepath.Dir(targetPath), err)
+			}
+			out, err := os.OpenFile(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, os.FileMode(header.Mode))
+			if err != nil {
+				return "", fmt.Errorf("创建文件失败 %s: %v", targetPath, err)
+			}
+			if _, err := io.Copy(out, tarReader); err != nil {
+				out.Close()
+				return "", fmt.Errorf("复制文件内容失败 %s: %v", targetPath, err)
+			}
+			out.Close()
+		}
+	}
+	return tempDir, nil
 }
 
 // extractZip 解压ZIP文件到临时目录
@@ -732,82 +970,57 @@ func extractZip(zipPath string) (string, error) {
 
 // findHapFile 在目录中查找第一个有效的.hap文件（过滤macOS隐藏文件）
 func findHapFile(dir string) (string, error) {
-	var hapFiles []string
-
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if !info.IsDir() && strings.ToLower(filepath.Ext(path)) == ".hap" {
-			// 过滤macOS的隐藏文件
-			baseName := filepath.Base(path)
-			if !strings.HasPrefix(baseName, "._") && !strings.Contains(path, "__MACOSX") {
-				hapFiles = append(hapFiles, path)
-			}
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		return "", fmt.Errorf("查找HAP文件失败: %v", err)
-	}
-
-	if len(hapFiles) == 0 {
-		return "", fmt.Errorf("在解压文件中未找到有效的.hap文件")
-	}
-
-	// 返回第一个找到的有效HAP文件
-	return hapFiles[0], nil
+	return findPackageFile(dir, ".hap")
 }
 
-// ParseAppPackageInfo 解析安装包信息（支持 HAP/APK 格式）
+// ParseAppPackageInfo 解析安装包信息（支持 HAP/APK 及压缩包）
 func (a *App) ParseAppPackageInfo(filePath string) (*hdc.InstallPackageInfo, error) {
 	fileExt := strings.ToLower(filepath.Ext(filePath))
 
 	if fileExt == ".apk" {
 		return adb.ParseApkAppInfo(filePath)
 	}
-
-	var hapFilePath string
-
 	if fileExt == ".hap" {
-		hapFilePath = filePath
-	} else if fileExt == ".zip" || fileExt == ".gz" {
-		format, err := detectFileFormat(filePath)
-		if err != nil {
-			return nil, fmt.Errorf("检测文件格式失败: %v", err)
-		}
-
-		extractedDir, err := extractArchive(filePath, format)
-		if err != nil {
-			if strings.Contains(err.Error(), "not a valid zip file") {
-				return nil, fmt.Errorf("文件不是有效的压缩包，请检查文件是否损坏或选择正确的文件")
-			}
-			if strings.Contains(err.Error(), "gzip") && strings.Contains(err.Error(), "invalid") {
-				return nil, fmt.Errorf("文件不是有效的GZIP压缩包，请检查文件是否损坏或选择正确的文件")
-			}
-			return nil, fmt.Errorf("解压文件失败: %v", err)
-		}
-
-		hapFilePath, err = findHapFile(extractedDir)
-		if err != nil {
-			return nil, fmt.Errorf("在压缩文件中未找到有效的HAP文件，请确保压缩包包含.hap格式的应用安装包")
-		}
-	} else {
-		return nil, fmt.Errorf("不支持的文件格式，请选择 .apk、.hap、.zip 或 .gz 文件")
+		return hdc.ParseHapAppInfo(filePath)
 	}
 
+	if !isAndroidInstallArchive(filePath) {
+		return nil, fmt.Errorf("不支持的文件格式，请选择 .apk、.hap、.zip、.gz、.tar 等文件")
+	}
+
+	format, err := resolveArchiveFormat(filePath)
+	if err != nil {
+		return nil, err
+	}
+	extractedDir, err := extractArchive(filePath, format)
+	if err != nil {
+		if strings.Contains(err.Error(), "not a valid zip file") {
+			return nil, fmt.Errorf("文件不是有效的压缩包，请检查文件是否损坏或选择正确的文件")
+		}
+		if strings.Contains(err.Error(), "gzip") && strings.Contains(err.Error(), "invalid") {
+			return nil, fmt.Errorf("文件不是有效的GZIP压缩包，请检查文件是否损坏或选择正确的文件")
+		}
+		return nil, fmt.Errorf("解压文件失败: %v", err)
+	}
+
+	if apkFilePath, apkErr := findApkFile(extractedDir); apkErr == nil {
+		info, parseErr := adb.ParseApkAppInfo(apkFilePath)
+		if parseErr != nil {
+			return nil, parseErr
+		}
+		info.ExtractedHapPath = apkFilePath
+		return info, nil
+	}
+
+	hapFilePath, hapErr := findHapFile(extractedDir)
+	if hapErr != nil {
+		return nil, fmt.Errorf("在压缩文件中未找到有效的 .apk 或 .hap 文件")
+	}
 	hapInfo, err := hdc.ParseHapAppInfo(hapFilePath)
 	if err != nil {
 		return nil, err
 	}
-
-	if fileExt == ".zip" || fileExt == ".gz" {
-		hapInfo.ExtractedHapPath = hapFilePath
-	}
-
+	hapInfo.ExtractedHapPath = hapFilePath
 	return hapInfo, nil
 }
 
@@ -817,12 +1030,35 @@ func (a *App) ParseHapAppInfo(filePath string) (*hdc.HapAppInfo, error) {
 	return a.ParseAppPackageInfo(filePath)
 }
 
-// InstallApp 安装应用，支持ZIP和GZIP压缩包
+func resolveArchiveInstallPath(filePath string, packageExt string) (string, error) {
+	// ponytail: always re-extract; stale zip/ temp can hold the wrong package type
+	return extractAndFindPackage(filePath, packageExt)
+}
+
+// InstallApp 安装应用，支持 ZIP/GZIP/TAR 压缩包（解压后找 apk/hap）
 func (a *App) InstallApp(connectKey string, filePath string, replace bool, sharedBundle bool) (*hdc.HdcResult, error) {
 	platform := deviceManager.GetDevicePlatform(connectKey)
+	fileExt := strings.ToLower(filepath.Ext(filePath))
 
 	if platform == device.PlatformAndroid {
-		result, err := adb.InstallApp(connectKey, filePath, replace)
+		installFilePath := filePath
+		if isAndroidInstallArchive(filePath) {
+			apkPath, err := resolveArchiveInstallPath(filePath, ".apk")
+			if err != nil {
+				return &hdc.HdcResult{
+					Success: false,
+					Error:   fmt.Sprintf("在压缩文件中未找到有效的APK文件：%v", err),
+				}, err
+			}
+			installFilePath = apkPath
+		} else if fileExt != ".apk" {
+			return &hdc.HdcResult{
+				Success: false,
+				Error:   "不支持的文件格式，请选择 .apk 或包含 apk 的压缩包",
+			}, fmt.Errorf("不支持的文件格式")
+		}
+
+		result, err := adb.InstallApp(connectKey, installFilePath, replace)
 		if err != nil {
 			return &hdc.HdcResult{Success: false, Error: err.Error()}, err
 		}
@@ -834,59 +1070,16 @@ func (a *App) InstallApp(connectKey string, filePath string, replace bool, share
 	}
 
 	var installFilePath string
-
-	fileExt := strings.ToLower(filepath.Ext(filePath))
-
 	if fileExt == ".hap" {
 		installFilePath = filePath
-	} else if fileExt == ".zip" || fileExt == ".gz" {
-		userDataDir, err := getUserDataDir()
+	} else if isAndroidInstallArchive(filePath) || fileExt == ".zip" || fileExt == ".gz" || fileExt == ".tgz" ||
+		strings.HasSuffix(strings.ToLower(filePath), ".tar.gz") || fileExt == ".tar" {
+		hapFilePath, err := resolveArchiveInstallPath(filePath, ".hap")
 		if err != nil {
 			return &hdc.HdcResult{
 				Success: false,
-				Error:   fmt.Sprintf("获取用户数据目录失败: %v", err),
+				Error:   "在压缩文件中未找到有效的HAP文件，请确保压缩包包含.hap格式的应用安装包",
 			}, err
-		}
-
-		tempDir := filepath.Join(userDataDir, "zip")
-
-		hapFilePath, err := findHapFile(tempDir)
-		if err != nil {
-			format, err := detectFileFormat(filePath)
-			if err != nil {
-				return &hdc.HdcResult{
-					Success: false,
-					Error:   fmt.Sprintf("检测文件格式失败: %v", err),
-				}, err
-			}
-
-			_, err = extractArchive(filePath, format)
-			if err != nil {
-				if strings.Contains(err.Error(), "not a valid zip file") {
-					return &hdc.HdcResult{
-						Success: false,
-						Error:   "文件不是有效的压缩包，请检查文件是否损坏或选择正确的文件",
-					}, err
-				}
-				if strings.Contains(err.Error(), "gzip") && strings.Contains(err.Error(), "invalid") {
-					return &hdc.HdcResult{
-						Success: false,
-						Error:   "文件不是有效的GZIP压缩包，请检查文件是否损坏或选择正确的文件",
-					}, err
-				}
-				return &hdc.HdcResult{
-					Success: false,
-					Error:   fmt.Sprintf("解压文件失败: %v", err),
-				}, err
-			}
-
-			hapFilePath, err = findHapFile(tempDir)
-			if err != nil {
-				return &hdc.HdcResult{
-					Success: false,
-					Error:   "在压缩文件中未找到有效的HAP文件，请确保压缩包包含.hap格式的应用安装包",
-				}, err
-			}
 		}
 		installFilePath = hapFilePath
 	} else {
@@ -897,6 +1090,254 @@ func (a *App) InstallApp(connectKey string, filePath string, replace bool, share
 	}
 
 	return hdc.InstallApp(connectKey, installFilePath, replace, sharedBundle)
+}
+
+func buildInstallHistoryItem(
+	platform string,
+	sourceType string,
+	source string,
+	cached installhistory.CachedPackage,
+	info *hdc.InstallPackageInfo,
+	result *hdc.HdcResult,
+) installhistory.Item {
+	item := installhistory.Item{
+		Platform:   platform,
+		SourceType: sourceType,
+		Source:     source,
+		FileName:   cached.FileName,
+		FileSize:   cached.FileSize,
+		CachedPath: cached.Path,
+		SHA256:     cached.SHA256,
+	}
+	if info != nil {
+		item.AppName = info.AppName
+		item.PackageName = info.BundleName
+		item.VersionName = info.VersionName
+		item.VersionCode = info.VersionCode
+	}
+	if result != nil {
+		item.Success = result.Success
+		item.Error = result.Error
+	}
+	return item
+}
+
+func validateInstallPlatform(platform string) error {
+	if platform != installhistory.PlatformAndroid && platform != installhistory.PlatformHarmonyOS {
+		return fmt.Errorf("不支持的平台：%s", platform)
+	}
+	return nil
+}
+
+func validateInstallSourceType(sourceType string) error {
+	if sourceType != installhistory.SourceLocal && sourceType != installhistory.SourceURL {
+		return fmt.Errorf("不支持的安装来源：%s", sourceType)
+	}
+	return nil
+}
+
+func buildInstallAttemptResult(
+	installResult *hdc.HdcResult,
+	installErr error,
+) (*hdc.HdcResult, *InstallAttemptResult) {
+	if installResult == nil {
+		installResult = &hdc.HdcResult{Success: false}
+		if installErr != nil {
+			installResult.Error = installErr.Error()
+		}
+	}
+	return installResult, &InstallAttemptResult{
+		Success: installResult.Success,
+		Output:  installResult.Output,
+		Error:   installResult.Error,
+	}
+}
+
+func addInstallWarning(result *InstallAttemptResult, warning string) {
+	if warning == "" {
+		return
+	}
+	if result.HistoryWarning == "" {
+		result.HistoryWarning = warning
+		return
+	}
+	result.HistoryWarning += "; " + warning
+}
+
+func finishInstallAttempt(
+	attempt *InstallAttemptResult,
+	installErr error,
+) (*InstallAttemptResult, error) {
+	if attempt == nil {
+		return nil, installErr
+	}
+	return attempt, nil
+}
+
+func cleanupPreparedInstallSource(
+	sourceType,
+	filePath,
+	stagingDir string,
+	removeFile func(string) error,
+) string {
+	if sourceType != installhistory.SourceURL {
+		return ""
+	}
+	resolvedStagingDir, err := filepath.EvalSymlinks(stagingDir)
+	if err != nil {
+		return fmt.Sprintf("清理下载暂存文件失败：%v", err)
+	}
+	resolvedFilePath, err := filepath.EvalSymlinks(filePath)
+	if err != nil {
+		return fmt.Sprintf("清理下载暂存文件失败：%v", err)
+	}
+	relativePath, err := filepath.Rel(resolvedStagingDir, resolvedFilePath)
+	if err != nil {
+		return fmt.Sprintf("清理下载暂存文件失败：%v", err)
+	}
+	if relativePath == "." ||
+		relativePath == ".." ||
+		strings.HasPrefix(relativePath, ".."+string(os.PathSeparator)) {
+		return ""
+	}
+	if err := removeFile(resolvedFilePath); err != nil {
+		return fmt.Sprintf("清理下载暂存文件失败：%v", err)
+	}
+	return ""
+}
+
+func (a *App) DownloadInstallPackage(rawURL, platform string) (*PreparedInstallPackage, error) {
+	if err := validateInstallPlatform(platform); err != nil {
+		return nil, err
+	}
+	if a.installStore == nil || a.installDownloader == nil {
+		return nil, fmt.Errorf("安装历史服务尚未初始化")
+	}
+	stagingDir, err := a.installStore.StagingDir()
+	if err != nil {
+		return nil, err
+	}
+	downloaded, err := a.installDownloader.Download(a.ctx, rawURL, platform, stagingDir)
+	if err != nil {
+		return nil, err
+	}
+	info, err := a.ParseAppPackageInfo(downloaded.Path)
+	if err != nil {
+		_ = os.Remove(downloaded.Path)
+		return nil, err
+	}
+	return &PreparedInstallPackage{FilePath: downloaded.Path, Info: info}, nil
+}
+
+func (a *App) InstallAppWithHistory(
+	connectKey,
+	filePath,
+	sourceType,
+	source string,
+) (*InstallAttemptResult, error) {
+	if err := validateInstallSourceType(sourceType); err != nil {
+		return nil, err
+	}
+	if a.installStore == nil {
+		return nil, fmt.Errorf("安装历史服务尚未初始化")
+	}
+	platform := string(deviceManager.GetDevicePlatform(connectKey))
+	if err := validateInstallPlatform(platform); err != nil {
+		return nil, err
+	}
+	var (
+		cached installhistory.CachedPackage
+		err    error
+	)
+	if sourceType == installhistory.SourceLocal {
+		// 本地文件不拷贝进 packages，避免缓存膨胀；重装依赖原路径仍存在
+		cached, err = a.installStore.DescribeLocalPackage(filePath)
+	} else {
+		cached, err = a.installStore.CachePackage(filePath)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	var cleanupWarning string
+	if sourceType == installhistory.SourceURL {
+		stagingDir, stagingErr := a.installStore.StagingDir()
+		if stagingErr != nil {
+			cleanupWarning = fmt.Sprintf("清理下载暂存文件失败：%v", stagingErr)
+		} else {
+			cleanupWarning = cleanupPreparedInstallSource(
+				sourceType,
+				filePath,
+				stagingDir,
+				os.Remove,
+			)
+		}
+	}
+
+	info, _ := a.ParseAppPackageInfo(cached.Path)
+	installResult, installErr := a.InstallApp(connectKey, cached.Path, false, false)
+	installResult, attempt := buildInstallAttemptResult(installResult, installErr)
+	attempt.CachedPath = cached.Path
+	addInstallWarning(attempt, cleanupWarning)
+	item := buildInstallHistoryItem(platform, sourceType, source, cached, info, installResult)
+	if _, historyErr := a.installStore.Append(item); historyErr != nil {
+		addInstallWarning(attempt, historyErr.Error())
+	}
+	return finishInstallAttempt(attempt, installErr)
+}
+
+func (a *App) GetInstallHistory(platform string) ([]installhistory.Item, error) {
+	if err := validateInstallPlatform(platform); err != nil {
+		return nil, err
+	}
+	if a.installStore == nil {
+		return nil, fmt.Errorf("安装历史服务尚未初始化")
+	}
+	return a.installStore.List(platform)
+}
+
+func (a *App) ReinstallAppFromHistory(connectKey, historyID string) (*InstallAttemptResult, error) {
+	if a.installStore == nil {
+		return nil, fmt.Errorf("安装历史服务尚未初始化")
+	}
+	platform := string(deviceManager.GetDevicePlatform(connectKey))
+	if err := validateInstallPlatform(platform); err != nil {
+		return nil, err
+	}
+	item, err := a.installStore.Find(platform, historyID)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := os.Stat(item.CachedPath); err != nil {
+		if os.IsNotExist(err) {
+			if item.SourceType == installhistory.SourceLocal {
+				return nil, fmt.Errorf("原安装包文件不存在")
+			}
+			return nil, fmt.Errorf("安装包缓存已丢失")
+		}
+		return nil, err
+	}
+	return a.InstallAppWithHistory(connectKey, item.CachedPath, item.SourceType, item.Source)
+}
+
+func (a *App) DeleteInstallHistory(platform, historyID string) error {
+	if err := validateInstallPlatform(platform); err != nil {
+		return err
+	}
+	if a.installStore == nil {
+		return fmt.Errorf("安装历史服务尚未初始化")
+	}
+	return a.installStore.Delete(platform, historyID)
+}
+
+func (a *App) ClearInstallHistory(platform string) error {
+	if err := validateInstallPlatform(platform); err != nil {
+		return err
+	}
+	if a.installStore == nil {
+		return fmt.Errorf("安装历史服务尚未初始化")
+	}
+	return a.installStore.Clear(platform)
 }
 
 // GetFileInfo 获取文件信息

@@ -208,29 +208,49 @@ export const logStreamAPI = {
     }
   },
 
-  onLog: (callback: (log: LogEntry | LogcatEntry, platform: string) => void): (() => void)[] => {
+  onLog: (
+    callback: (
+      log: LogEntry | LogcatEntry,
+      platform: string,
+      connectKey?: string
+    ) => void
+  ): (() => void)[] => {
     const unsubHilog = EventsOn('hilog:log', (data: any) => {
       if (data && data.entry) {
-        callback(data.entry as LogEntry, 'harmonyos')
+        callback(data.entry as LogEntry, 'harmonyos', data.connectKey as string | undefined)
       }
     })
     const unsubLogcat = EventsOn('logcat:log', (data: any) => {
       if (data && data.entry) {
-        callback(data.entry as LogcatEntry, 'android')
+        callback(
+          data.entry as LogcatEntry,
+          'android',
+          (data.deviceId || data.connectKey) as string | undefined
+        )
       }
     })
     return [unsubHilog, unsubLogcat]
   },
 
-  onError: (callback: (error: string, platform: string) => void): (() => void)[] => {
+  onError: (
+    callback: (error: string, platform: string, connectKey?: string) => void
+  ): (() => void)[] => {
     const unsubHilog = EventsOn('hilog:error', (data: any) => {
       if (data && data.error) {
-        callback(data.error as string, 'harmonyos')
+        callback(
+          data.error as string,
+          'harmonyos',
+          data.connectKey as string | undefined
+        )
       }
     })
     const unsubLogcat = EventsOn('logcat:error', (data: any) => {
       if (data && data.error) {
-        callback(data.error as string, 'android')
+        callback(
+          data.error as string,
+          'android',
+          (data.deviceId || data.connectKey) as string | undefined
+        )
       }
     })
     return [unsubHilog, unsubLogcat]

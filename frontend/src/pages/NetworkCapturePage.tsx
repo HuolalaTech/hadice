@@ -5,6 +5,7 @@ import {
   Play,
   Square,
   Loader2,
+  Download,
   Trash2,
   Search,
   Wand2
@@ -26,10 +27,13 @@ import { WindowToggleButton } from '@/components/layout/WindowToggleButton'
 import { HelpToggleButton } from '@/components/layout/HelpToggleButton'
 import { NoDeviceState } from '@/components/layout/NoDeviceState'
 import { NetworkRequestDetail } from '@/components/network/NetworkRequestDetail'
+import { CollapsibleSplitPane } from '@/components/network/CollapsibleSplitPane'
 import { HarmonyProcessSelect } from '@/components/hiprofiler/HarmonyProcessSelect'
 import { HarmonyWebViewPanel } from '@/components/hiprofiler/HarmonyWebViewPanel'
 import { getNetworkRequestKey } from '@/lib/network-request-key'
 import { buildNetworkRequestUrl, escapeRegexLiteral } from '@/lib/network-url'
+import { hydrateHarmonyCaptureApp } from '@/lib/capture-selected-app'
+import { useCaptureSelectedAppStore } from '@/store/captureSelectedAppStore'
 import type {
   NetworkRequest,
   PortForwardStatus,
@@ -90,13 +94,13 @@ export function NetworkCapturePage(): React.JSX.Element {
     startCaptureListeners,
     stopCapture: storeStopCapture,
     setRequests: storeSetRequests,
-    clearRequests: storeClearRequests,
     setSearchQuery: storeSetSearchQuery,
     setIsRegexMode: storeSetIsRegexMode,
     setIsFilterMode: storeSetIsFilterMode,
     setAutoScrollEnabled: storeSetAutoScrollEnabled,
     setSearchMatches: storeSetSearchMatches,
-    setSelectedRequest: storeSetSelectedRequest
+    setSelectedRequest: storeSetSelectedRequest,
+    clearRequests: storeClearRequests
   } = useNetworkCaptureStore()
 
   // 使用 selector hook 响应式订阅设备状态
@@ -108,22 +112,32 @@ export function NetworkCapturePage(): React.JSX.Element {
   const [mockInitialTestUrl, setMockInitialTestUrl] = useState('')
   const [localPort, setLocalPort] = useState(6100)
   const [devicePort, setDevicePort] = useState(35201)
-  const [leftPanelWidth, setLeftPanelWidth] = useState(45) // 左侧面板宽度百分比，默认45:55
-  const [isResizing, setIsResizing] = useState(false)
   const [captureMode, setCaptureModeState] = useState<CaptureMode>(loadCaptureMode)
   const setCaptureMode = useCallback((mode: CaptureMode) => {
     setCaptureModeState(mode)
     saveCaptureMode(mode)
-    if (mode !== 'hiprofiler') setPanelView('requests')
+    // 网页列表走 CDP，与 Sophon/HiProfiler 抓包无关；切模式时保留当前视图
   }, [])
   const [selectedHiProfilerApp, setSelectedHiProfilerApp] = useState<HarmonyDebuggableApp | null>(null)
+  const setCaptureAppForDevice = useCaptureSelectedAppStore((s) => s.setForDevice)
+  const getCaptureAppForDevice = useCaptureSelectedAppStore((s) => s.getForDevice)
+  const [captureAppStoreReady, setCaptureAppStoreReady] = useState(() =>
+    useCaptureSelectedAppStore.persist.hasHydrated()
+  )
+  const skipNextCaptureAppPersistRef = useRef(false)
+  useEffect(() => {
+    setCaptureAppStoreReady(useCaptureSelectedAppStore.persist.hasHydrated())
+    return useCaptureSelectedAppStore.persist.onFinishHydration(() => {
+      setCaptureAppStoreReady(true)
+    })
+  }, [])
   const [panelView, setPanelView] = useState<PanelView>('requests')
   const [hiProfilerStatus, setHiProfilerStatus] = useState<HiProfilerCaptureStatus>({
     state: 'idle',
     isCapturing: false
   })
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [exportRequestsOverride, setExportRequestsOverride] = useState<NetworkRequest[] | null>(null)
+  const [singleExportRequest, setSingleExportRequest] = useState<NetworkRequest | null>(null)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   
   // Mock 配置
@@ -190,7 +204,7 @@ export function NetworkCapturePage(): React.JSX.Element {
   const selectedExportRequests = requests.filter(
     (request) => !request.isSessionBoundary && selectedIds.has(getNetworkRequestKey(request))
   )
-  const exportRequests = exportRequestsOverride ?? selectedExportRequests
+  const exportRequests = singleExportRequest ? [singleExportRequest] : selectedExportRequests
 
   /**
    * 获取心跳状态颜色
@@ -198,7 +212,7 @@ export function NetworkCapturePage(): React.JSX.Element {
   const getHeartbeatColor = (status: string): string => {
     switch (status) {
       case 'healthy':
-        return 'bg-green-500'
+        return 'bg-green-600 dark:bg-green-500'
       case 'warning':
         return 'bg-yellow-500'
       case 'timeout':
@@ -241,6 +255,37 @@ export function NetworkCapturePage(): React.JSX.Element {
       })
     }
   }, [selectedDevice, initializeDevice, syncStatus])
+
+  // 切设备 / 水合完成：恢复上次选中的抓包进程（后台仍在抓则下面 status 会覆盖）
+  useEffect(() => {
+    if (!captureAppStoreReady) return
+    const key = selectedDevice?.connectKey
+    if (!key) {
+      setSelectedHiProfilerApp(null)
+      return
+    }
+    skipNextCaptureAppPersistRef.current = true
+    setSelectedHiProfilerApp(
+      hydrateHarmonyCaptureApp(getCaptureAppForDevice(key), [])
+    )
+  }, [captureAppStoreReady, selectedDevice?.connectKey, getCaptureAppForDevice])
+
+  // 记住选择（切面板 / 重启 Hadice）；水合恢复的那一次不写盘
+  useEffect(() => {
+    if (!captureAppStoreReady) return
+    const key = selectedDevice?.connectKey
+    if (!key) return
+    if (skipNextCaptureAppPersistRef.current) {
+      skipNextCaptureAppPersistRef.current = false
+      return
+    }
+    setCaptureAppForDevice(key, selectedHiProfilerApp)
+  }, [
+    captureAppStoreReady,
+    selectedDevice?.connectKey,
+    selectedHiProfilerApp,
+    setCaptureAppForDevice,
+  ])
 
   // HiProfiler 使用独立后端状态，不能复用 Sophon TCP Server 的 isCapturing。
   useEffect(() => {
@@ -428,33 +473,23 @@ export function NetworkCapturePage(): React.JSX.Element {
     }
   }, [selectedDevice, storeStopCapture])
 
-  // 清空整个请求列表，包括设备断开等会话边界项。
+  // 删除已勾选请求，与安卓抓包保持一致。
   const handleClearRequests = useCallback((): void => {
     if (!selectedDevice) return
 
-    captureEvent('network capture cleared')
-    storeClearRequests(selectedDevice.connectKey)
+    if (selectedIds.size === 0) {
+      toast.warning('请先在左侧请求列表前勾选想要删除的项')
+      return
+    }
+
+    captureEvent('network capture selected requests deleted')
+    const remaining = requests.filter(
+      (request) => !selectedIds.has(getNetworkRequestKey(request))
+    )
+    storeSetRequests(selectedDevice.connectKey, remaining)
     storeSetSelectedRequest(selectedDevice.connectKey, null)
     setSelectedIds(new Set())
-    toast.success('已清空请求列表')
-  }, [selectedDevice, storeClearRequests, storeSetSelectedRequest])
-
-  const handleDeleteRequests = useCallback((requestsToDelete: NetworkRequest[]): void => {
-    if (!selectedDevice) return
-
-    const keys = new Set(requestsToDelete.map(getNetworkRequestKey))
-    const remaining = requests.filter((request) => !keys.has(getNetworkRequestKey(request)))
-    storeSetRequests(selectedDevice.connectKey, remaining)
-    setSelectedIds((current) => {
-      const next = new Set(current)
-      for (const key of keys) next.delete(key)
-      return next
-    })
-    if (selectedRequest && keys.has(getNetworkRequestKey(selectedRequest))) {
-      storeSetSelectedRequest(selectedDevice.connectKey, null)
-    }
-    toast.success(requestsToDelete.length > 1 ? `已删除 ${requestsToDelete.length} 个请求` : '已删除该请求')
-  }, [requests, selectedDevice, selectedRequest, storeSetRequests, storeSetSelectedRequest])
+  }, [requests, selectedDevice, selectedIds, storeSetRequests, storeSetSelectedRequest])
 
   // 表头一键清屏：清空当前设备抓包面板全部数据
   const handleClearAllRequests = useCallback((): void => {
@@ -581,14 +616,20 @@ export function NetworkCapturePage(): React.JSX.Element {
     })
   }, [isFilterMode, requests, searchMatches, searchQuery, selectedIds])
 
-  const handleExportRequests = useCallback((requestsToExport: NetworkRequest[]): void => {
-    setExportRequestsOverride(requestsToExport)
+  const handleExportClick = useCallback((): void => {
+    setSingleExportRequest(null)
     setExportDialogOpen(true)
   }, [])
 
+  const handleExportSingleRequest = useCallback((request: NetworkRequest): void => {
+    setSelectedRequest(request)
+    setSingleExportRequest(request)
+    setExportDialogOpen(true)
+  }, [setSelectedRequest])
+
   const handleExportDialogOpenChange = useCallback((open: boolean): void => {
     setExportDialogOpen(open)
-    if (!open) setExportRequestsOverride(null)
+    if (!open) setSingleExportRequest(null)
   }, [])
 
   const prettyJsonOrOriginal = useCallback((value?: string): string => {
@@ -645,9 +686,13 @@ export function NetworkCapturePage(): React.JSX.Element {
       enabled: true,
       rules: [...mockConfig.rules, newRule]
     })
-    captureEvent('harmony sophon mock rule generated from request')
+    captureEvent(
+      captureMode === 'sophon'
+        ? 'harmony sophon mock rule generated from request'
+        : 'harmony hiprofiler mock rule generated from request'
+    )
     setMockConfigDialogOpen(true)
-  }, [buildMockRuleFromRequest, mockConfig, setSelectedRequest])
+  }, [buildMockRuleFromRequest, captureMode, mockConfig, setSelectedRequest])
 
   const handleMockConfigChange = useCallback((config: MockConfig): void => {
     setMockConfig(config)
@@ -662,40 +707,6 @@ export function NetworkCapturePage(): React.JSX.Element {
       setMockInitialTestUrl('')
     }
   }, [])
-
-  // 处理拖动调整宽度
-  const containerRef = useRef<HTMLDivElement>(null)
-  
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent): void => {
-      if (!isResizing || !containerRef.current) return
-      
-      const containerRect = containerRef.current.getBoundingClientRect()
-      const newLeftWidth = ((e.clientX - containerRect.left) / containerRect.width) * 100
-      
-      // 限制在20%到80%之间
-      const clampedWidth = Math.max(20, Math.min(80, newLeftWidth))
-      setLeftPanelWidth(clampedWidth)
-    }
-
-    const handleMouseUp = (): void => {
-      setIsResizing(false)
-    }
-
-    if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove)
-      document.addEventListener('mouseup', handleMouseUp)
-      document.body.style.cursor = 'col-resize'
-      document.body.style.userSelect = 'none'
-    }
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
-  }, [isResizing])
 
   // 组件卸载时关闭测试连接（不清理事件监听器，让后台继续抓包）
   useEffect(() => {
@@ -1017,53 +1028,54 @@ export function NetworkCapturePage(): React.JSX.Element {
             </div>
           </div>
 
-          {/* HiProfiler 模式：进程选择器 + 请求/网页切换 */}
-          {captureMode === 'hiprofiler' && (
-            <>
-              <HarmonyProcessSelect
-                deviceId={selectedDevice.connectKey}
-                value={selectedHiProfilerApp}
-                onChange={setSelectedHiProfilerApp}
-                disabled={isHiProfilerActive}
-              />
-              <div className="flex items-center rounded-md border p-0.5">
-                <Button
-                  variant={panelView === 'requests' ? 'secondary' : 'ghost'}
-                  size="sm"
-                  className="h-7 px-2 text-xs"
-                  onClick={() => setPanelView('requests')}
-                >
-                  请求
-                </Button>
-                <Button
-                  variant={panelView === 'webview' ? 'secondary' : 'ghost'}
-                  size="sm"
-                  className="h-7 px-2 text-xs"
-                  onClick={() => setPanelView('webview')}
-                >
-                  网页
-                </Button>
-              </div>
-            </>
+          {/* HiProfiler 抓包 / Sophon 看网页：都需要选进程 */}
+          {(captureMode === 'hiprofiler' || panelView === 'webview') && (
+            <HarmonyProcessSelect
+              deviceId={selectedDevice.connectKey}
+              value={selectedHiProfilerApp}
+              onChange={setSelectedHiProfilerApp}
+              disabled={captureMode === 'hiprofiler' && isHiProfilerActive}
+            />
           )}
 
-          {/* Sophon 模式：Mock 按钮 */}
-          {captureMode === 'sophon' && (
+          <div className="flex items-center rounded-md border p-0.5">
             <Button
-              variant="outline"
+              variant={panelView === 'requests' ? 'secondary' : 'ghost'}
               size="sm"
-              onClick={() => {
-                captureEvent('harmony sophon mock config opened')
-                setMockConfigDraft(null)
-                setMockInitialTestUrl('')
-                setMockConfigDialogOpen(true)
-              }}
-              className="gap-2"
+              className="h-7 px-2 text-xs"
+              onClick={() => setPanelView('requests')}
             >
-              <Wand2 className="h-4 w-4" />
-              <span>Mock</span>
+              请求
             </Button>
-          )}
+            <Button
+              variant={panelView === 'webview' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setPanelView('webview')}
+            >
+              网页
+            </Button>
+          </div>
+
+          {/* Mock 按钮（Sophon / HiProfiler 均可打开配置面板） */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              captureEvent(
+                captureMode === 'sophon'
+                  ? 'harmony sophon mock config opened'
+                  : 'harmony hiprofiler mock config opened'
+              )
+              setMockConfigDraft(null)
+              setMockInitialTestUrl('')
+              setMockConfigDialogOpen(true)
+            }}
+            className="gap-2"
+          >
+            <Wand2 className="h-4 w-4" />
+            <span>Mock</span>
+          </Button>
 
           {/* 开始/停止按钮 */}
           {captureMode === 'hiprofiler' ? (
@@ -1126,11 +1138,20 @@ export function NetworkCapturePage(): React.JSX.Element {
           >
             <Trash2 className="h-4 w-4" />
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportClick}
+            className="gap-1.5"
+            title="导出网络请求"
+          >
+            <Download className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
-      {/* 主内容区 */}
-      {captureMode === 'hiprofiler' && panelView === 'webview' ? (
+      {/* 主内容区：网页列表走 CDP，Sophon / HiProfiler 共用 */}
+      {panelView === 'webview' ? (
         <Card className="flex-1 min-h-0 overflow-hidden">
           <HarmonyWebViewPanel
             deviceId={selectedDevice.connectKey}
@@ -1144,46 +1165,43 @@ export function NetworkCapturePage(): React.JSX.Element {
           />
         </Card>
       ) : (
-        <div ref={containerRef} className="flex-1 flex min-h-0 relative gap-1">
-          {/* 左侧：请求列表 */}
-          <Card className="min-w-0 flex flex-col" style={{ width: `${leftPanelWidth}%` }}>
-            <NetworkRequestTable
-              requests={requests}
-              selectedRequest={selectedRequest}
-              onSelectRequest={setSelectedRequest}
-              searchQuery={searchQuery}
-              searchMatches={searchMatches}
-              isFilterMode={isFilterMode}
-              isRegexMode={isRegexMode}
-              autoScrollEnabled={autoScrollEnabled}
-              setAutoScrollEnabled={setAutoScrollEnabled}
-              onClearAll={handleClearAllRequests}
-              showExportCheckboxes
-              selectedIds={selectedIds}
-              onToggleSelect={handleToggleExportSelect}
-              onToggleSelectAll={handleToggleExportSelectAll}
-              onExportRequests={handleExportRequests}
-              onDeleteRequests={handleDeleteRequests}
-              onMockRequest={captureMode === 'sophon' ? handleMockSingleRequest : undefined}
-            />
-          </Card>
-
-          {/* 拖动区域 - 空白区域，鼠标悬停时变化 */}
-          <div
-            className="w-2 cursor-col-resize flex-shrink-0 z-10 hover:bg-primary/20 transition-colors"
-            onMouseDown={() => setIsResizing(true)}
-          />
-
-          {/* 右侧：请求详情 */}
-          <Card className="min-w-0 flex flex-col flex-1 overflow-hidden">
-            <NetworkRequestDetail
-              request={selectedRequest}
-              searchQuery={searchQuery}
-              searchMatches={searchMatches}
-              isRegexMode={isRegexMode}
-            />
-          </Card>
-        </div>
+        <CollapsibleSplitPane
+          className="flex-1"
+          left={(controls) => (
+            <Card className="h-full min-w-0 flex flex-col overflow-hidden">
+              <NetworkRequestTable
+                requests={requests}
+                selectedRequest={selectedRequest}
+                onSelectRequest={setSelectedRequest}
+                searchQuery={searchQuery}
+                searchMatches={searchMatches}
+                isFilterMode={isFilterMode}
+                isRegexMode={isRegexMode}
+                autoScrollEnabled={autoScrollEnabled}
+                setAutoScrollEnabled={setAutoScrollEnabled}
+                onClearAll={handleClearAllRequests}
+                showExportCheckboxes
+                selectedIds={selectedIds}
+                onToggleSelect={handleToggleExportSelect}
+                onToggleSelectAll={handleToggleExportSelectAll}
+                onExportRequest={handleExportSingleRequest}
+                onMockRequest={handleMockSingleRequest}
+                onCollapsePanel={controls.collapseLeft}
+              />
+            </Card>
+          )}
+          right={(controls) => (
+            <Card className="h-full min-w-0 flex flex-col overflow-hidden">
+              <NetworkRequestDetail
+                request={selectedRequest}
+                searchQuery={searchQuery}
+                searchMatches={searchMatches}
+                isRegexMode={isRegexMode}
+                onCollapsePanel={controls.collapseRight}
+              />
+            </Card>
+          )}
+        />
       )}
 
       {/* 底部状态栏 - 一行显示 */}
@@ -1195,12 +1213,12 @@ export function NetworkCapturePage(): React.JSX.Element {
             <span>已选: <span className="font-mono">{selectedIds.size}</span> 个</span>
           </>
         )}
-        {captureMode === 'hiprofiler' && selectedHiProfilerApp && (
+        {selectedHiProfilerApp && (captureMode === 'hiprofiler' || panelView === 'webview') && (
           <>
             <span>|</span>
             <span>进程: <span className="font-mono">{selectedHiProfilerApp.processName}</span></span>
             <span>PID: <span className="font-mono">{selectedHiProfilerApp.pid || '-'}</span></span>
-            {hiProfilerStatus.state === 'waiting'
+            {captureMode === 'hiprofiler' && hiProfilerStatus.state === 'waiting'
               ? <span className="text-amber-500">等待进程重启</span>
               : selectedHiProfilerApp.pid <= 0 && <span className="text-amber-500">进程已退出</span>}
           </>

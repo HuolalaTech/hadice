@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Copy, ExternalLink, Loader2, Pause, Play, RefreshCw, Trash2 } from 'lucide-react'
+import { Copy, ExternalLink, Globe, Loader2, Pause, Play, RefreshCw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { formatDateTime } from '@/lib/format'
+import { openSystemBrowser, openWebPeek } from '@/lib/open-web-peek'
 import type { HarmonyWebViewPage } from '@/types/hdc'
-import * as App from '../../../bindings/Hadice/backend/appservice.js'
 
 export interface WebViewPagesTarget {
   pid: number
@@ -116,13 +116,14 @@ export function WebViewPagesPanel({
     else toast.error('复制失败')
   }
 
+  async function handleOpenPeek(): Promise<void> {
+    if (!selected?.url) return
+    await openWebPeek(selected.url)
+  }
+
   async function handleOpenBrowser(): Promise<void> {
     if (!selected?.url) return
-    try {
-      await App.OpenBrowser(selected.url)
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : '打开浏览器失败')
-    }
+    await openSystemBrowser(selected.url)
   }
 
   function handleClear(): void {
@@ -197,8 +198,18 @@ export function WebViewPagesPanel({
             size="sm"
             className="h-8 gap-1"
             disabled={!selected?.url}
+            onClick={() => void handleOpenPeek()}
+            title="网页看看（应用内打开）"
+          >
+            <Globe className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1"
+            disabled={!selected?.url}
             onClick={() => void handleOpenBrowser()}
-            title="用浏览器打开"
+            title="用系统浏览器打开"
           >
             <ExternalLink className="h-3.5 w-3.5" />
           </Button>

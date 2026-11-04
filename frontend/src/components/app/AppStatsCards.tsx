@@ -43,7 +43,7 @@ export function AppStatsCards({
         onClick={() => onFilterChange('thirdParty')}
         className={`gap-2 ${filter === 'thirdParty' ? 'ring-2 ring-primary' : ''}`}
       >
-        <Package className="h-4 w-4 text-green-500" />
+        <Package className="h-4 w-4 text-green-700 dark:text-green-400" />
         <span className="text-xs text-muted-foreground">第三方</span>
         <span className="font-mono font-bold">{stats.thirdParty}</span>
       </Button>

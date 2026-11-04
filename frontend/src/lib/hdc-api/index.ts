@@ -14,6 +14,7 @@ import { fileTransferAPI } from './file-transfer'
 import { shellAPI } from './shell'
 import { screenMirrorAPI } from './screen-mirror'
 import { networkCaptureAPI } from './network-capture'
+import { trackLogAPI } from './track-log'
 import { logAPI } from './log'
 
 /**
@@ -58,6 +59,8 @@ export const hdcAPI = {
   
   // 网络抓包
   networkCapture: networkCaptureAPI,
+
+  trackLog: trackLogAPI,
   
   // 应用日志管理
   ...logAPI

@@ -2,6 +2,7 @@ package backend
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"Hadice/backend/phoneAgent"
@@ -135,5 +136,34 @@ func (a *App) GetPhoneAgentStatus(sessionID string) (map[string]interface{}, err
 		"exists":   true,
 		"running":  agent.IsRunning(),
 		"sessionID": agent.GetSessionID(),
+	}, nil
+}
+
+// TestLLMConnection 验证 Key，并尽量拉取该厂商模型列表
+func (a *App) TestLLMConnection(config phoneAgent.LLMConfig) (map[string]interface{}, error) {
+	client := phoneAgent.NewLLMClient(config)
+	models, listErr := client.ListModels()
+	if listErr == nil {
+		return map[string]interface{}{
+			"success": true,
+			"message": fmt.Sprintf("连接成功，已拉取 %d 个模型", len(models)),
+			"models":  models,
+		}, nil
+	}
+
+	if strings.TrimSpace(config.Model) != "" {
+		if pingErr := client.Ping(); pingErr == nil {
+			return map[string]interface{}{
+				"success": true,
+				"message": "连接成功，但未能拉取模型列表: " + listErr.Error(),
+				"models":  []string{},
+			}, nil
+		}
+	}
+
+	return map[string]interface{}{
+		"success": false,
+		"message": listErr.Error(),
+		"models":  []string{},
 	}, nil
 }

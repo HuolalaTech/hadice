@@ -1,20 +1,28 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { FileText, HelpCircle, Circle, Moon, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { HelpDialog } from '@/components/dialogs/HelpDialog'
 import { useDeviceStore } from '@/store/deviceStore'
 import { useThemeStore } from '@/store/themeStore'
+import * as App from '../../../bindings/Hadice/backend/appservice'
 
 /**
  * 底部状态栏组件
- * 显示连接状态、设备信息、HDC 版本、日志和帮助入口
+ * 显示连接状态、设备信息、应用版本、日志和帮助入口
  */
 export function Footer(): React.JSX.Element {
   const [helpOpen, setHelpOpen] = useState(false)
+  const [appVersion, setAppVersion] = useState('')
   const { selectedDevice, devices } = useDeviceStore()
   const theme = useThemeStore((s) => s.theme)
   const toggleTheme = useThemeStore((s) => s.toggleTheme)
+
+  useEffect(() => {
+    App.GetAppVersion()
+      .then(setAppVersion)
+      .catch(() => setAppVersion(''))
+  }, [])
 
   // 计算连接状态
   const connectedCount = devices.filter((d) => d.status === 'Connected').length
@@ -29,7 +37,9 @@ export function Footer(): React.JSX.Element {
           <div className="flex items-center gap-1.5">
             <Circle
               className={`h-2 w-2 ${
-                isConnected ? 'fill-green-500 text-green-500' : 'fill-red-500 text-red-500'
+                isConnected
+                  ? 'fill-green-600 text-green-600 dark:fill-green-500 dark:text-green-500'
+                  : 'fill-red-600 text-red-600 dark:fill-red-500 dark:text-red-500'
               }`}
             />
             <span>{isConnected ? `已连接 (${connectedCount})` : '未连接'}</span>
@@ -47,8 +57,8 @@ export function Footer(): React.JSX.Element {
               <span
                 className={`ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[11px] leading-none align-middle -translate-y-[1px] ${
                   selectedDevice.platform === 'harmonyos'
-                    ? 'bg-blue-500/20 text-blue-400'
-                    : 'bg-green-500/20 text-green-400'
+                    ? 'bg-blue-600/15 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400'
+                    : 'bg-green-700/15 text-green-700 dark:bg-green-500/20 dark:text-green-400'
                 }`}
               >
                 {selectedDevice.platform === 'harmonyos' ? '鸿蒙' : '安卓'}
@@ -56,8 +66,14 @@ export function Footer(): React.JSX.Element {
             )}
           </span>
 
-          <Separator orientation="vertical" className="h-3" />
-
+          {appVersion ? (
+            <>
+              <Separator orientation="vertical" className="h-3" />
+              <span className="font-mono" title={`Hadice v${appVersion}`}>
+                v{appVersion}
+              </span>
+            </>
+          ) : null}
         </div>
 
         {/* 右侧操作按钮 */}
