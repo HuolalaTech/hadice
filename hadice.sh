@@ -97,6 +97,36 @@ print_artifacts() {
   fi
 }
 
+# 发布包：校验本地 .env.ci（只报已填数量，不打印密钥）
+require_release_env() {
+  if [[ ! -f "${ROOT_DIR}/.env.ci" ]]; then
+    echo "发布包需要根目录 .env.ci（私密配置，不入库）" >&2
+    echo "  cp .env.ci.example .env.ci 并填写后重试" >&2
+    exit 1
+  fi
+  local filled
+  filled="$(
+    awk -F= '
+      /^[[:space:]]*#/ || /^[[:space:]]*$/ { next }
+      {
+        key=$1
+        gsub(/^[[:space:]]+|[[:space:]]+$/,"",key)
+        if (key == "") next
+        val=substr($0, index($0,"=")+1)
+        gsub(/^[[:space:]]+|[[:space:]]+$/,"",val)
+        if (val ~ /^".*"$/ || val ~ /^'\''.*'\''$/) val=substr(val,2,length(val)-2)
+        if (val != "") n++
+      }
+      END { print n+0 }
+    ' "${ROOT_DIR}/.env.ci"
+  )"
+  if [[ "${filled}" -eq 0 ]]; then
+    echo "错误: .env.ci 键全空，发布包不会嵌入更新检查 / 分析等配置" >&2
+    exit 1
+  fi
+  echo "==> .env.ci: ${filled} 个键已填（值不打印）"
+}
+
 cmd_help() {
   echo ""
   echo "说明文档: ${DOC_FILE}"
@@ -109,6 +139,7 @@ cmd_help() {
     echo "  ./hadice.sh hot      # 热启动"
     echo "  ./hadice.sh app      # 编译本机 macOS App + DMG"
     echo "  ./hadice.sh app all  # macOS arm64+amd64 + Windows"
+    echo "  ./hadice.sh release  # 发布包：校验 .env.ci → 烤入 → 打包（默认 all）"
     echo "  ./hadice.sh open     # 打开产物"
   fi
   echo ""
@@ -129,9 +160,10 @@ cmd_menu() {
   echo "  4) app-amd64   打包 macOS Intel"
   echo "  5) app-windows 打包 Windows amd64（安装包+ZIP，需 Docker）"
   echo "  6) app-all     打包全部：macOS arm64/amd64 + Windows"
-  echo "  7) build       仅编译本机二进制（不打安装包）"
-  echo "  8) open        打开本机架构的 Hadice.app"
-  echo "  9) dist        列出 dist 产物"
+  echo "  7) release     发布包编译（校验 .env.ci → gen:cienv → 打包，默认 all）"
+  echo "  8) build       仅编译本机二进制（不打安装包）"
+  echo "  9) open        打开本机架构的 Hadice.app"
+  echo "  d) dist        列出 dist 产物"
   echo "  h) help        查看完整说明"
   echo "  0) quit        退出"
   echo "----------------------------------------"
@@ -145,9 +177,10 @@ cmd_menu() {
     4|app-amd64|amd64|intel) cmd_app amd64 ;;
     5|app-windows|windows|win) cmd_app windows ;;
     6|app-all|all|cross) cmd_app all ;;
-    7|build) cmd_build ;;
-    8|open) cmd_open ;;
-    9|dist|list) cmd_dist ;;
+    7|release|pub|publish) cmd_release ;;
+    8|build) cmd_build ;;
+    9|open) cmd_open ;;
+    d|dist|list) cmd_dist ;;
     h|help|-h|--help) cmd_help ;;
     0|q|quit|exit|"") echo "已取消。" ;;
     *)
@@ -246,6 +279,22 @@ cmd_app() {
   fi
 }
 
+# 发布包：强制用本地 .env.ci 烤入 cienv_generated.go，再打安装包（默认全平台）
+# 与 app 的区别：缺/空 .env.ci 直接失败；编完提醒勿提交非空 cienv_generated.go
+cmd_release() {
+  require_release_env
+  need_cmd task
+  echo "==> 烤入私密配置: task gen:cienv（.env.ci 本身不进包）"
+  task gen:cienv
+  local target="${1:-all}"
+  echo "==> 发布包编译: target=${target}"
+  cmd_app "${target}"
+  echo ""
+  echo "发布后（开源树）请把 backend/cienv_generated.go 恢复为空默认再提交："
+  echo "  mv .env.ci .env.ci.bak && task gen:cienv && mv .env.ci.bak .env.ci"
+  echo "  （或手动清空 generated 后 gen:cienv；切勿 git add .env.ci）"
+}
+
 cmd_open() {
   local target
   target="$(normalize_target "${1:-}")"
@@ -285,6 +334,7 @@ main() {
     dev|hot|start) cmd_dev "$@" ;;
     build) cmd_build "$@" ;;
     app|package|dmg) cmd_app "$@" ;;
+    release|pub|publish) cmd_release "$@" ;;
     open) cmd_open "$@" ;;
     dist|list|artifacts) cmd_dist ;;
     # 快捷：./hadice.sh arm64 | windows | all
