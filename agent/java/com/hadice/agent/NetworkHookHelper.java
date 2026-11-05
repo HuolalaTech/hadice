@@ -36,7 +36,6 @@ public class NetworkHookHelper {
     private static final String TAG = "NetworkHookHelper";
     private static final AtomicInteger requestIdCounter = new AtomicInteger(0);
     private static final AtomicInteger mockDebugCounter = new AtomicInteger(0);
-    private static final int CRONET_MAX_BODY_BYTES = 1024 * 1024;
     private static final Set<Integer> injectedClients = new HashSet<>();
     private static Object cachedInterceptor = null;
     private static volatile JSONObject mockConfig = null;
@@ -74,7 +73,11 @@ public class NetworkHookHelper {
     }
 
     static void sendGnetRequest(int id, String method, String url, Map<String, String> headers) {
-        nativeSendMessage(buildRequestJson(id, method, url, headers, "", "GNet"));
+        sendGnetRequest(id, method, url, headers, "");
+    }
+
+    static void sendGnetRequest(int id, String method, String url, Map<String, String> headers, String body) {
+        nativeSendMessage(buildRequestJson(id, method, url, headers, body, "GNet"));
     }
 
     public static void sendGnetResponse(int id, String url, int status, Map<String, String> headers, byte[] body) {
@@ -298,18 +301,17 @@ public class NetworkHookHelper {
 
                     // Read body bytes
                     Method peekMethod = response.getClass().getMethod("peekBody", long.class);
-                    Object peekBody = peekMethod.invoke(response, 1024 * 1024L);
+                    Object peekBody = peekMethod.invoke(response, Long.MAX_VALUE);
                     if (peekBody != null) {
                         // Image types: base64 encode for frontend display
                         if (contentType != null && contentType.startsWith("image/")) {
                             try {
                                 Method bytesMethod = peekBody.getClass().getMethod("bytes");
                                 byte[] rawBytes = (byte[]) bytesMethod.invoke(peekBody);
-                                if (rawBytes != null && rawBytes.length > 0 && rawBytes.length < 3 * 1024 * 1024) {
+                                if (rawBytes != null && rawBytes.length > 0) {
                                     respBody = "data:" + contentType + ";base64,"
                                         + android.util.Base64.encodeToString(rawBytes, android.util.Base64.NO_WRAP);
-                                } else if (rawBytes != null && rawBytes.length >= 512 * 1024) {
-                                    respBody = "[image too large: " + rawBytes.length + " bytes]";
+
                                 }
                             } catch (Exception ignored) {}
                         } else if (isBinaryContentType(contentType)) {
@@ -781,6 +783,17 @@ public class NetworkHookHelper {
         if (callback != null) callback.setRequestHeader(name, value);
     }
 
+    public static Object wrapGnetCronetUploadProvider(Object provider, Object builder) {
+        try {
+            linkGnetCronetBuilder(builder);
+            GnetCronetCaptureCallback callback = gnetBuilderStates.get(builder);
+            return callback != null ? callback.wrapUploadProvider(provider) : provider;
+        } catch (Throwable error) {
+            android.util.Log.w(TAG, "gnet upload provider wrapping skipped: " + error.getMessage());
+            return provider;
+        }
+    }
+
     public static Object createGnetCronetMockRequest(Object builder) {
         try {
             linkGnetCronetBuilder(builder);
@@ -857,10 +870,9 @@ public class NetworkHookHelper {
         }
 
         synchronized void appendRequestBody(ByteBuffer buffer, int startPosition) {
-            if (requestBody.size() >= CRONET_MAX_BODY_BYTES) return;
             int endPosition = buffer.position();
             if (endPosition <= startPosition) return;
-            int length = Math.min(endPosition - startPosition, CRONET_MAX_BODY_BYTES - requestBody.size());
+            int length = endPosition - startPosition;
             if (length <= 0) return;
             byte[] data = new byte[length];
             ByteBuffer copy = buffer.duplicate();
@@ -870,12 +882,11 @@ public class NetworkHookHelper {
         }
 
         synchronized void appendResponseBody(ByteBuffer buffer) {
-            if (responseBody.size() >= CRONET_MAX_BODY_BYTES) return;
             int endPosition = buffer.position();
             Integer startPosition = readStartPositions.remove(System.identityHashCode(buffer));
             int start = startPosition != null ? startPosition : 0;
             if (endPosition <= start) return;
-            int length = Math.min(endPosition - start, CRONET_MAX_BODY_BYTES - responseBody.size());
+            int length = endPosition - start;
             if (length <= 0) return;
             byte[] data = new byte[length];
             ByteBuffer copy = buffer.duplicate();
@@ -1267,7 +1278,7 @@ public class NetworkHookHelper {
         return joined.toString();
     }
 
-    private static String formatCronetBody(byte[] data, Map<String, String> headers) {
+    static String formatCronetBody(byte[] data, Map<String, String> headers) {
         if (data == null || data.length == 0) return "";
         String contentType = findHeader(headers, "Content-Type");
         if (contentType != null && contentType.toLowerCase().startsWith("image/")) {

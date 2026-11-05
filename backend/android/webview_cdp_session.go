@@ -24,7 +24,6 @@ const (
 	webViewDiscoveryInterval  = 2 * time.Second
 	webViewSocketScanInterval = 30 * time.Second
 	webViewCommandTimeout     = 5 * time.Second
-	webViewMaxBodyBytes       = 1024 * 1024
 )
 
 type WebViewCDPSession struct {
@@ -421,7 +420,7 @@ func newWebViewCDPClient(conn *websocket.Conn) *webViewCDPClient {
 }
 
 func (c *webViewCDPClient) readLoop(ctx context.Context) error {
-	c.conn.SetReadLimit(16 * 1024 * 1024)
+	c.conn.SetReadLimit(0)
 	for {
 		var message cdpEnvelope
 		if err := c.conn.ReadJSON(&message); err != nil {
@@ -497,9 +496,11 @@ func (s *WebViewCDPSession) runTarget(ctx context.Context, target *webViewCDPTar
 		readDone <- client.readLoop(ctx)
 	}()
 
+	// CDP uses signed 32-bit buffer sizes; request the protocol maximum.
 	if err := callCDPNoResult(ctx, client, "Network.enable", map[string]interface{}{
-		"maxTotalBufferSize":    8 * webViewMaxBodyBytes,
-		"maxResourceBufferSize": webViewMaxBodyBytes,
+		"maxTotalBufferSize":    int64(1<<31 - 1),
+		"maxResourceBufferSize": int64(1<<31 - 1),
+		"maxPostDataSize":       int64(1<<31 - 1),
 	}); err != nil {
 		log.Printf("[WebViewCDP] Network.enable failed: %v", err)
 		return
@@ -719,14 +720,11 @@ func (s *WebViewCDPSession) readCDPResponseBody(
 		return ""
 	}
 	if !bodyResult.Base64Encoded {
-		return truncateWebViewBody(bodyResult.Body)
+		return bodyResult.Body
 	}
 	decoded, err := base64.StdEncoding.DecodeString(bodyResult.Body)
 	if err != nil {
 		return ""
-	}
-	if len(decoded) > webViewMaxBodyBytes {
-		decoded = decoded[:webViewMaxBodyBytes]
 	}
 	if isWebViewTextMimeType(mimeType) {
 		return string(decoded)
@@ -735,13 +733,6 @@ func (s *WebViewCDPSession) readCDPResponseBody(
 		return "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(decoded)
 	}
 	return fmt.Sprintf("[binary:%s]", mimeType)
-}
-
-func truncateWebViewBody(body string) string {
-	if len(body) <= webViewMaxBodyBytes {
-		return body
-	}
-	return body[:webViewMaxBodyBytes]
 }
 
 func isWebViewTextMimeType(mimeType string) bool {

@@ -3,6 +3,8 @@ package com.hadice.agent;
 import gnet.android.org.chromium.net.CronetException;
 import gnet.android.org.chromium.net.ExperimentalUrlRequest;
 import gnet.android.org.chromium.net.UrlRequest;
+import gnet.android.org.chromium.net.UploadDataProvider;
+import gnet.android.org.chromium.net.UploadDataSink;
 import gnet.android.org.chromium.net.UrlResponseInfo;
 import java.io.ByteArrayOutputStream;
 import java.util.AbstractMap;
@@ -24,6 +26,8 @@ public final class GnetCronetCaptureCallback extends UrlRequest.Callback {
     private int status;
     private Map<String, String> headers = new LinkedHashMap<>();
     private final ByteArrayOutputStream body = new ByteArrayOutputStream();
+    private final ByteArrayOutputStream requestBody = new ByteArrayOutputStream();
+    private final Map<String, String> requestHeaders = new LinkedHashMap<>();
     private boolean requestSent;
     private boolean responseSent;
     private String method = "GET";
@@ -41,7 +45,61 @@ public final class GnetCronetCaptureCallback extends UrlRequest.Callback {
     }
 
     void setRequestHeader(String name, String value) {
-        if (name != null && value != null) headers.put(name, value);
+        if (name != null && value != null) requestHeaders.put(name, value);
+    }
+
+    Object wrapUploadProvider(Object provider) {
+        if (!(provider instanceof UploadDataProvider) || provider instanceof CaptureUploadProvider) return provider;
+        return new CaptureUploadProvider((UploadDataProvider) provider);
+    }
+
+    private synchronized void appendRequestBody(ByteBuffer buffer, int start) {
+        int length = buffer.position() - start;
+        if (length <= 0) return;
+        ByteBuffer copy = buffer.duplicate();
+        copy.position(start);
+        byte[] bytes = new byte[length];
+        copy.get(bytes);
+        requestBody.write(bytes, 0, length);
+    }
+
+    private synchronized String requestBodyText() {
+        return NetworkHookHelper.formatCronetBody(requestBody.toByteArray(), requestHeaders);
+    }
+
+    private final class CaptureUploadProvider extends UploadDataProvider {
+        private final UploadDataProvider provider;
+
+        CaptureUploadProvider(UploadDataProvider provider) { this.provider = provider; }
+
+        @Override public void read(final UploadDataSink sink, final ByteBuffer buffer) throws Exception {
+            final int start = buffer.position();
+            // Providers may complete asynchronously, so copy before forwarding the completion.
+            provider.read(new UploadDataSink() {
+                @Override public void onReadSucceeded(boolean finalChunk) {
+                    try { appendRequestBody(buffer, start); } catch (Throwable ignored) {}
+                    sink.onReadSucceeded(finalChunk);
+                }
+                @Override public void onReadError(Exception error) { sink.onReadError(error); }
+                @Override public void onRewindSucceeded() { sink.onRewindSucceeded(); }
+                @Override public void onRewindError(Exception error) { sink.onRewindError(error); }
+            }, buffer);
+        }
+
+        @Override public void rewind(final UploadDataSink sink) throws Exception {
+            provider.rewind(new UploadDataSink() {
+                @Override public void onReadSucceeded(boolean finalChunk) { sink.onReadSucceeded(finalChunk); }
+                @Override public void onReadError(Exception error) { sink.onReadError(error); }
+                @Override public void onRewindSucceeded() {
+                    synchronized (GnetCronetCaptureCallback.this) { requestBody.reset(); }
+                    sink.onRewindSucceeded();
+                }
+                @Override public void onRewindError(Exception error) { sink.onRewindError(error); }
+            });
+        }
+
+        @Override public long getLength() throws Exception { return provider.getLength(); }
+        @Override public void close() throws Exception { provider.close(); }
     }
 
     Object createMockRequest() {
@@ -50,7 +108,7 @@ public final class GnetCronetCaptureCallback extends UrlRequest.Callback {
             android.util.Log.w("NetworkHookHelper", "gnet Cronet Mock skipped: executor is missing, url=" + url);
             return null;
         }
-        JSONObject rule = NetworkHookHelper.findGnetMockRule(method, url, headers);
+        JSONObject rule = NetworkHookHelper.findGnetMockRule(method, url, requestHeaders);
         if (rule == null || !"replace".equals(rule.optString("responseMode", "replace"))) {
             return null;
         }
@@ -64,7 +122,7 @@ public final class GnetCronetCaptureCallback extends UrlRequest.Callback {
             NetworkHookHelper.sendGnetMockDebug("gnet_cronet_mock_matched",
                 rule.optString("name", rule.optString("id", "")) + " url=" + url);
             android.util.Log.i("NetworkHookHelper", "gnet Cronet Mock matched: url=" + url);
-            return new MockGnetUrlRequest(id, method, url, headers,
+            return new MockGnetUrlRequest(id, method, url, requestHeaders,
                 (UrlRequest.Callback) delegate, executor, NetworkHookHelper.MockResponseSpec.fromRule(rule), rule);
         } catch (Throwable error) {
             NetworkHookHelper.sendGnetMockDebug("gnet_cronet_mock_create_failed",
@@ -84,7 +142,7 @@ public final class GnetCronetCaptureCallback extends UrlRequest.Callback {
         capture(info);
         try {
             ByteBuffer copy = buffer.duplicate();
-            int length = Math.min(copy.position(), 1024 * 1024 - body.size());
+            int length = copy.position();
             if (length > 0) {
                 copy.position(0); copy.limit(length);
                 byte[] bytes = new byte[length]; copy.get(bytes); body.write(bytes);
@@ -113,7 +171,7 @@ public final class GnetCronetCaptureCallback extends UrlRequest.Callback {
     private void sendRequest() {
         if (!requestSent) {
             requestSent = true;
-            NetworkHookHelper.sendGnetRequest(id, method, url, headers);
+            NetworkHookHelper.sendGnetRequest(id, method, url, requestHeaders, requestBodyText());
         }
     }
     private void sendResponse() {

@@ -125,7 +125,8 @@ func startCapture(config CaptureConfig, cleanExisting bool, cancelCh <-chan stru
 
 	// 4. gRPC 连接
 	addr := fmt.Sprintf("127.0.0.1:%d", localPort)
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(int(^uint(0)>>1))))
 	if err != nil {
 		removePortForward(config.DeviceID, localPort)
 		emitCaptureState(config.EmitEvent, config.DeviceID, config.PID, config.BundleName, config.ProcessName, "error", err.Error())

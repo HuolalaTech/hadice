@@ -450,6 +450,7 @@ func (a *App) ClearRequests(deviceId string) error {
 func (a *App) readCaptureData(session *CaptureSession, sessionKey string) {
 	log.Printf("[NetworkCapture] 开始读取抓包数据: %s", sessionKey)
 	scanner := bufio.NewScanner(session.Socket)
+	scanner.Buffer(make([]byte, 64*1024), int(^uint(0)>>1))
 	buffer := ""
 	lineCount := 0
 	parseSuccessCount := 0
@@ -831,8 +832,8 @@ func (a *App) readClientData(server *CaptureServer, sessionKey string, client *C
 	log.Printf("[NetworkCapture] 开始读取客户端数据: %s", sessionKey)
 
 	scanner := bufio.NewScanner(client.Conn)
-	// 增大扫描器缓冲区，防止大消息导致断流（默认64KB，增加到10MB）
-	const maxCapacity = 10 * 1024 * 1024
+	// 按需增长到平台可表示的最大长度，避免按消息大小中断抓包。
+	const maxCapacity = int(^uint(0) >> 1)
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, maxCapacity)
 

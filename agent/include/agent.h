@@ -71,6 +71,7 @@ private:
     jmethodID link_gnet_cronet_builder_method_ = nullptr;
     jmethodID record_gnet_cronet_http_method_ = nullptr;
     jmethodID record_gnet_cronet_header_method_ = nullptr;
+    jmethodID wrap_gnet_cronet_upload_provider_method_ = nullptr;
     jmethodID create_gnet_cronet_mock_request_method_ = nullptr;
     jmethodID update_mock_config_method_ = nullptr;
     std::vector<jmethodID> okhttp_methods_;
@@ -82,6 +83,7 @@ private:
     std::vector<jmethodID> cronet_builder_build_methods_;
     std::vector<jmethodID> gnet_cronet_builder_set_method_methods_;
     std::vector<jmethodID> gnet_cronet_builder_add_header_methods_;
+    std::vector<jmethodID> gnet_cronet_builder_set_upload_methods_;
     std::vector<jmethodID> gnet_cronet_builder_build_methods_;
     std::vector<jmethodID> cronet_read_methods_;
     std::string dex_path_;

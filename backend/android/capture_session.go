@@ -526,7 +526,7 @@ func acceptAndroidConnections(server *AndroidCaptureServer, emitEvent EventEmitF
 func readAndroidCaptureData(server *AndroidCaptureServer, client *ClientSession, emitEvent EventEmitFunc) {
 	log.Printf("[AndroidCapture] readAndroidCaptureData started")
 	scanner := bufio.NewScanner(client.Conn)
-	const maxCapacity = 10 * 1024 * 1024
+	const maxCapacity = int(^uint(0) >> 1)
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, maxCapacity)
 

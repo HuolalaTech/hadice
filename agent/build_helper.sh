@@ -53,6 +53,8 @@ javac -source 8 -target 8 \
     "${CRONET_STUB_SRC_DIR}/org/chromium/net/CronetException.java" \
     "${CRONET_STUB_SRC_DIR}/org/chromium/net/UploadDataProvider.java" \
     "${CRONET_STUB_SRC_DIR}/org/chromium/net/UploadDataSink.java" \
+    "${CRONET_STUB_SRC_DIR}/gnet/android/org/chromium/net/UploadDataProvider.java" \
+    "${CRONET_STUB_SRC_DIR}/gnet/android/org/chromium/net/UploadDataSink.java" \
     "$GNET_CALLBACK_SRC" \
     "${CRONET_STUB_SRC_DIR}/gnet/android/org/chromium/net/UrlRequest.java" \
     "${CRONET_STUB_SRC_DIR}/gnet/android/org/chromium/net/ExperimentalUrlRequest.java" \

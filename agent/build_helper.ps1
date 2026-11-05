@@ -98,6 +98,8 @@ $javaSources = @(
     (Join-Path $scriptDir 'java_stub\org\chromium\net\CronetException.java'),
     (Join-Path $scriptDir 'java_stub\org\chromium\net\UploadDataProvider.java'),
     (Join-Path $scriptDir 'java_stub\org\chromium\net\UploadDataSink.java'),
+    (Join-Path $scriptDir 'java_stub\gnet\android\org\chromium\net\UploadDataProvider.java'),
+    (Join-Path $scriptDir 'java_stub\gnet\android\org\chromium\net\UploadDataSink.java'),
     (Join-Path $scriptDir 'java\com\hadice\agent\GnetCronetCaptureCallback.java'),
     (Join-Path $scriptDir 'java_stub\gnet\android\org\chromium\net\UrlRequest.java'),
     (Join-Path $scriptDir 'java_stub\gnet\android\org\chromium\net\ExperimentalUrlRequest.java'),

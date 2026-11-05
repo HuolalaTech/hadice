@@ -813,7 +813,7 @@ export function NetworkRequestDetail({
 
   if (!request) {
     return (
-      <div className="h-full flex flex-col overflow-hidden">
+      <div className="h-full min-h-0 flex flex-col overflow-hidden">
         {detailToolbar}
         <div className="flex flex-1 items-center justify-center text-muted-foreground">
           <div className="text-center">
@@ -841,9 +841,9 @@ export function NetworkRequestDetail({
     : (Object.keys(urlParsedParams).length > 0 ? urlParsedParams : undefined)
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="h-full min-h-0 flex flex-col overflow-hidden">
       {detailToolbar}
-      <Tabs defaultValue="request" className="w-full h-full flex flex-col">
+      <Tabs defaultValue="request" className="w-full flex-1 min-h-0 flex flex-col">
         <TabsList className="w-full flex-shrink-0">
           <TabsTrigger value="request" className="flex-1 flex items-center justify-center gap-2">
             请求
@@ -859,7 +859,7 @@ export function NetworkRequestDetail({
           </TabsTrigger>
         </TabsList>
         
-        <ScrollArea className="flex-1">
+        <ScrollArea className="flex-1 min-h-0">
         
         {/* 请求内容 */}
         <TabsContent value="request" className="mt-2 space-y-0">

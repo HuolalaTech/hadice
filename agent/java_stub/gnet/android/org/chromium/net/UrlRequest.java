@@ -18,6 +18,7 @@ public abstract class UrlRequest {
     public abstract static class Builder {
         public abstract Builder setHttpMethod(String method);
         public abstract Builder addHeader(String name, String value);
+        public abstract Builder setUploadDataProvider(UploadDataProvider provider, Executor executor);
         public abstract UrlRequest build();
     }
 

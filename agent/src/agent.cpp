@@ -388,10 +388,14 @@ void Agent::setupGnetCronetBuilderBreakpoints(JNIEnv* env, jclass builderClass) 
             helper_class_, "recordGnetCronetHttpMethod", "(Ljava/lang/Object;Ljava/lang/String;)V");
         record_gnet_cronet_header_method_ = env->GetStaticMethodID(
             helper_class_, "recordGnetCronetHeader", "(Ljava/lang/Object;Ljava/lang/String;Ljava/lang/String;)V");
+        wrap_gnet_cronet_upload_provider_method_ = env->GetStaticMethodID(
+            helper_class_, "wrapGnetCronetUploadProvider",
+            "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
         create_gnet_cronet_mock_request_method_ = env->GetStaticMethodID(
             helper_class_, "createGnetCronetMockRequest", "(Ljava/lang/Object;)Ljava/lang/Object;");
         if (!link_gnet_cronet_builder_method_ || !record_gnet_cronet_http_method_
-            || !record_gnet_cronet_header_method_ || !create_gnet_cronet_mock_request_method_) {
+            || !record_gnet_cronet_header_method_ || !wrap_gnet_cronet_upload_provider_method_
+            || !create_gnet_cronet_mock_request_method_) {
             LOGE("Cannot find gnet Cronet builder helper methods");
             env->ExceptionClear();
             return;
@@ -402,6 +406,9 @@ void Agent::setupGnetCronetBuilderBreakpoints(JNIEnv* env, jclass builderClass) 
                            gnet_cronet_builder_set_method_methods_, "gnet Cronet.Builder.setHttpMethod()");
     hookCronetMethodByName(env, builderClass, "addHeader", "(Ljava/lang/String;Ljava/lang/String;)",
                            gnet_cronet_builder_add_header_methods_, "gnet Cronet.Builder.addHeader()");
+    hookCronetMethodByName(env, builderClass, "setUploadDataProvider",
+                           "(Lgnet/android/org/chromium/net/UploadDataProvider;Ljava/util/concurrent/Executor;)",
+                           gnet_cronet_builder_set_upload_methods_, "gnet Cronet.Builder.setUploadDataProvider()");
     // The gnet implementation invokes its covariant ExperimentalUrlRequest
     // overload directly. Our mock is also an ExperimentalUrlRequest, making
     // ForceEarlyReturnObject type-safe for both overloads.
@@ -466,6 +473,8 @@ bool Agent::isKnownBreakpoint(jmethodID method) const {
             != gnet_cronet_builder_set_method_methods_.end()
         || std::find(gnet_cronet_builder_add_header_methods_.begin(), gnet_cronet_builder_add_header_methods_.end(), method)
             != gnet_cronet_builder_add_header_methods_.end()
+        || std::find(gnet_cronet_builder_set_upload_methods_.begin(), gnet_cronet_builder_set_upload_methods_.end(), method)
+            != gnet_cronet_builder_set_upload_methods_.end()
         || std::find(gnet_cronet_builder_build_methods_.begin(), gnet_cronet_builder_build_methods_.end(), method)
             != gnet_cronet_builder_build_methods_.end()
         || std::find(cronet_read_methods_.begin(), cronet_read_methods_.end(), method) != cronet_read_methods_.end();
@@ -487,6 +496,8 @@ bool Agent::isGnetCronetBuilderMethod(jmethodID method) const {
             != gnet_cronet_builder_set_method_methods_.end()
         || std::find(gnet_cronet_builder_add_header_methods_.begin(), gnet_cronet_builder_add_header_methods_.end(), method)
             != gnet_cronet_builder_add_header_methods_.end()
+        || std::find(gnet_cronet_builder_set_upload_methods_.begin(), gnet_cronet_builder_set_upload_methods_.end(), method)
+            != gnet_cronet_builder_set_upload_methods_.end()
         || std::find(gnet_cronet_builder_build_methods_.begin(), gnet_cronet_builder_build_methods_.end(), method)
             != gnet_cronet_builder_build_methods_.end();
 }
@@ -691,6 +702,24 @@ bool Agent::setupEventCallbacks() {
                         if (setErr != JVMTI_ERROR_NONE) {
                             LOGE("Cannot replace Cronet upload provider parameter: %d", setErr);
                         }
+                    }
+                    if (wrappedProvider) env->DeleteLocalRef(wrappedProvider);
+                    env->DeleteLocalRef(provider);
+                }
+            } else if (isGnetCronetBuilder
+                && std::find(agent->gnet_cronet_builder_set_upload_methods_.begin(),
+                             agent->gnet_cronet_builder_set_upload_methods_.end(), method)
+                    != agent->gnet_cronet_builder_set_upload_methods_.end()
+                && agent->wrap_gnet_cronet_upload_provider_method_) {
+                jobject provider = nullptr;
+                if (jvmti->GetLocalObject(thread, 0, 2, &provider) == JVMTI_ERROR_NONE && provider) {
+                    jobject wrappedProvider = env->CallStaticObjectMethod(
+                        agent->helper_class_, agent->wrap_gnet_cronet_upload_provider_method_, provider, builder);
+                    if (env->ExceptionCheck()) {
+                        logJniException(env, "wrapGnetCronetUploadProvider");
+                    } else if (wrappedProvider) {
+                        jvmtiError err = jvmti->SetLocalObject(thread, 0, 2, wrappedProvider);
+                        if (err != JVMTI_ERROR_NONE) LOGE("Cannot replace gnet upload provider: %d", err);
                     }
                     if (wrappedProvider) env->DeleteLocalRef(wrappedProvider);
                     env->DeleteLocalRef(provider);
@@ -976,6 +1005,9 @@ void Agent::shutdown() {
     for (jmethodID method : gnet_cronet_builder_add_header_methods_) {
         jvmti_env_->ClearBreakpoint(method, 0);
     }
+    for (jmethodID method : gnet_cronet_builder_set_upload_methods_) {
+        jvmti_env_->ClearBreakpoint(method, 0);
+    }
     for (jmethodID method : gnet_cronet_builder_build_methods_) {
         jvmti_env_->ClearBreakpoint(method, 0);
     }
@@ -991,6 +1023,7 @@ void Agent::shutdown() {
     cronet_builder_build_methods_.clear();
     gnet_cronet_builder_set_method_methods_.clear();
     gnet_cronet_builder_add_header_methods_.clear();
+    gnet_cronet_builder_set_upload_methods_.clear();
     gnet_cronet_builder_build_methods_.clear();
     cronet_read_methods_.clear();
     jvmti_env_->SetEventNotificationMode(JVMTI_DISABLE, JVMTI_EVENT_BREAKPOINT, nullptr);
