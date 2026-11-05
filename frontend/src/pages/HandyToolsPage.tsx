@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { WindowToggleButton } from '@/components/layout/WindowToggleButton'
 import { HelpToggleButton } from '@/components/layout/HelpToggleButton'
 import { cn, NAV_HIGHLIGHT_CLS, NAV_HIGHLIGHT_EASE, NAV_HIGHLIGHT_MS } from '@/lib/utils'
+import { captureEvent } from '@/lib/posthog'
 import * as App from '../../bindings/Hadice/backend/appservice'
 import { EventsOn } from '../../wailsjs/runtime/runtime'
 
@@ -23,6 +24,10 @@ import { EventsOn } from '../../wailsjs/runtime/runtime'
 function useStored(key: string, init: string): [string, (v: string) => void] {
   const [v, setV] = useState(() => { try { return localStorage.getItem(key) ?? init } catch { return init } })
   return [v, (next: string) => { setV(next); try { localStorage.setItem(key, next) } catch { /* ignore */ } }]
+}
+/** 便捷工具业务动作；复制/折叠/清空历史等不走这里 */
+function trackHandy(action: string, props?: Record<string, unknown>): void {
+  captureEvent('handy tool action', { action, ...props })
 }
 function copyText(text: string): void {
   if (!text) return
@@ -170,11 +175,11 @@ function JsonTool(): React.JSX.Element {
   return (
     <div className="flex h-full flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" onClick={() => run((v) => JSON.stringify(v, null, 2))}>格式化</Button>
-        <Button size="sm" variant="secondary" onClick={() => run((v) => JSON.stringify(v))}>压缩</Button>
-        <Button size="sm" variant="secondary" onClick={() => run((v) => JSON.stringify(JSON.stringify(v)))}>转义</Button>
-        <Button size="sm" variant="secondary" onClick={() => { try { const v: unknown = JSON.parse(input); setOutput(typeof v === 'string' ? v : JSON.stringify(v, null, 2)); setErr('') } catch (e) { setErr(e instanceof Error ? e.message : String(e)) } }}>去转义</Button>
-        <Button size="sm" variant="outline" onClick={() => run((v) => { setErr('JSON 合法'); return JSON.stringify(v, null, 2) })}>校验</Button>
+        <Button size="sm" onClick={() => { trackHandy('json_format'); run((v) => JSON.stringify(v, null, 2)) }}>格式化</Button>
+        <Button size="sm" variant="secondary" onClick={() => { trackHandy('json_minify'); run((v) => JSON.stringify(v)) }}>压缩</Button>
+        <Button size="sm" variant="secondary" onClick={() => { trackHandy('json_escape'); run((v) => JSON.stringify(JSON.stringify(v))) }}>转义</Button>
+        <Button size="sm" variant="secondary" onClick={() => { trackHandy('json_unescape'); try { const v: unknown = JSON.parse(input); setOutput(typeof v === 'string' ? v : JSON.stringify(v, null, 2)); setErr('') } catch (e) { setErr(e instanceof Error ? e.message : String(e)) } }}>去转义</Button>
+        <Button size="sm" variant="outline" onClick={() => { trackHandy('json_validate'); run((v) => { setErr('JSON 合法'); return JSON.stringify(v, null, 2) }) }}>校验</Button>
         <CopyBtn text={output || (treeValue !== undefined ? JSON.stringify(treeValue, null, 2) : '')} />
       </div>
       {err && <div className={cn('text-xs', err === 'JSON 合法' ? 'text-green-600' : 'text-red-500')}>{err}</div>}
@@ -263,6 +268,7 @@ function PostmanTool(): React.JSX.Element {
   const copyResp = resp ? JSON.stringify(resp.headers, null, 2) + '\n\n' + (bodyJson !== undefined ? JSON.stringify(bodyJson, null, 2) : resp.body) : error
   const send = async (): Promise<void> => {
     setLoading(true); setError('')
+    trackHandy('postman_send', { method })
     try {
       const r = await App.HandySendHTTPRequest(method, url, headers, body)
       const item: HttpHistItem = { method, url, headers, body, status: r?.statusText ?? '', elapsed: r?.elapsedMs ?? 0, respBody: r?.body ?? '', respHeaders: (r?.headers ?? {}) as Record<string, string>, time: new Date().toLocaleString(), ok: true }
@@ -580,7 +586,7 @@ function EncodeTool(): React.JSX.Element {
       <div className="mb-1.5 flex items-baseline justify-between px-0.5"><span className="text-sm font-semibold">{title}</span><span className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">{sub}</span></div>
       <div className="grid grid-cols-2 gap-2">
         {ENC_MODES.filter((m) => m.dir === dir).map((m) => (
-          <button key={m.id} type="button" title={`${m.label}（${m.hint}）`} onClick={() => { setMode(m.id); void runWith(() => m.run(input)) }}
+          <button key={m.id} type="button" title={`${m.label}（${m.hint}）`} onClick={() => { trackHandy('encode_run', { mode: m.id, dir: m.dir }); setMode(m.id); void runWith(() => m.run(input)) }}
             className={cn('rounded-md border px-2.5 py-2 text-left transition-colors', mode.id === m.id ? 'border-primary bg-primary/10 ring-1 ring-primary/30' : 'border-border bg-background/60 hover:border-primary/40 hover:bg-primary/5')}>
             <div className={cn('truncate text-[13px] font-medium leading-5', mode.id === m.id && 'text-primary')}>{m.label}</div>
             <div className="truncate text-[11px] leading-4 text-muted-foreground">{m.hint}</div>
@@ -708,6 +714,7 @@ function QrTool(): React.JSX.Element {
     image.src = src
   }
   const pickImage = async (): Promise<void> => {
+    trackHandy('qr_pick_image')
     try { const f = await App.HandySelectImageFile(); if (f?.dataUrl) decodeSrc(f.dataUrl, f.name || '选择图片') }
     catch (e) { toast.error(e instanceof Error ? e.message : String(e)) }
   }
@@ -734,7 +741,7 @@ function QrTool(): React.JSX.Element {
       <div className="flex items-start gap-4">
         {img && <img src={img} alt="二维码" className="h-48 w-48 rounded border border-border" />}
         <div className="flex-1 space-y-4">
-          {img && <a className="mb-2 inline-block" href={img} download="qrcode.png"><Button size="sm" variant="outline">下载 PNG</Button></a>}
+          {img && <a className="mb-2 inline-block" href={img} download="qrcode.png" onClick={() => trackHandy('qr_download')}><Button size="sm" variant="outline">下载 PNG</Button></a>}
           <div
             data-wails-dropzone
             className={cn('rounded-lg border-2 border-dashed p-4 text-center text-xs text-muted-foreground transition-all duration-200', dragging ? 'scale-[1.01] border-primary bg-primary/15 font-medium text-primary shadow-[0_0_0_4px] shadow-primary/20' : 'border-border')}
@@ -799,7 +806,7 @@ function ImageBase64Tool(): React.JSX.Element {
         onDrop={(e) => { e.preventDefault(); dropBind.onDrop(e); loadBlob(e.dataTransfer.files?.[0], e.dataTransfer.files?.[0]?.name ?? '拖拽图片') }}
       >
         {dragging ? '松开鼠标，释放图片开始转换' : '拖图片到此处，或在本工具页按 Ctrl+V 粘贴截图/图片'}
-        <div className="mt-3"><Button size="sm" variant="outline" onClick={() => void (async () => { try { const f = await App.HandySelectImageFile(); if (!f?.dataUrl) return; setDataUrl(f.dataUrl); const image = new Image(); image.onload = () => setInfo(`${f.name} · ${f.mime} · 原始 ${formatBytes(f.size)} · ${image.naturalWidth}×${image.naturalHeight}`); image.src = f.dataUrl } catch (e) { toast.error(e instanceof Error ? e.message : String(e)) } })()}>选择图片</Button></div>
+        <div className="mt-3"><Button size="sm" variant="outline" onClick={() => void (async () => { trackHandy('image_base64_pick'); try { const f = await App.HandySelectImageFile(); if (!f?.dataUrl) return; setDataUrl(f.dataUrl); const image = new Image(); image.onload = () => setInfo(`${f.name} · ${f.mime} · 原始 ${formatBytes(f.size)} · ${image.naturalWidth}×${image.naturalHeight}`); image.src = f.dataUrl } catch (e) { toast.error(e instanceof Error ? e.message : String(e)) } })()}>选择图片</Button></div>
       </div>
       {info && <div className="text-xs text-muted-foreground">{info} · DataUri 大小：{formatBytes(dataUrl.length)}</div>}
       {dataUrl && <img src={dataUrl} alt="预览" className="max-h-64 rounded border border-border" />}
@@ -889,7 +896,7 @@ function PasswordTool(): React.JSX.Element {
           <label key={k} className="flex cursor-pointer items-center gap-1"><input type="checkbox" checked={opts.split(',').includes(k)} onChange={() => toggle(k)} />{l}</label>
         ))}
         <span>数量</span><XInput className="w-20" type="number" min={1} max={20} value={countStr} onChange={(e) => setCountStr(e.target.value)} />
-        <Button size="sm" onClick={() => gen()}>生成</Button><CopyBtn text={pwds.join('\n')} />
+        <Button size="sm" onClick={() => { trackHandy('password_generate'); gen() }}>生成</Button><CopyBtn text={pwds.join('\n')} />
       </div>
       {pwds.length > 0 && <Textarea readOnly className={cn(taCls, 'min-h-[90px] shrink-0')} value={pwds.join('\n')} />}
       <HistoryList fill title="历史记录" items={history} onDelete={(i) => setHistoryRaw(JSON.stringify(history.filter((_, x) => x !== i)))} onClear={() => setHistoryRaw('[]')} />
@@ -958,6 +965,7 @@ function TimestampTool(): React.JSX.Element {
   const [calcUnit, setCalcUnit] = useStored('hadice-handy-calc-unit', 'day')
   const [calcResult, setCalcResult] = useState('')
   const calcDiff = (): void => {
+    trackHandy('timestamp_diff')
     const a = parseSmartTime(diffFrom), b = parseSmartTime(diffTo)
     if (!a || !b) { setDiffResult('开始或结束时间无法识别'); return }
     const ms = b.ms - a.ms, abs = Math.abs(ms), sec = Math.floor(abs / 1000)
@@ -965,6 +973,7 @@ function TimestampTool(): React.JSX.Element {
     setDiffResult(`${ms < 0 ? '结束早于开始，' : ''}相差 ${d} 天 ${h} 小时 ${m} 分 ${secR} 秒 · 共 ${sec.toLocaleString()} 秒 / ${(sec / 60).toFixed(1)} 分钟 / ${(sec / 3600).toFixed(2)} 小时 / ${(sec / 86400).toFixed(3)} 天`)
   }
   const calcAddSub = (): void => {
+    trackHandy('timestamp_add_sub', { op: calcOp, unit: calcUnit })
     const base = parseSmartTime(baseTime)
     if (!base) { setCalcResult('基准时间无法识别'); return }
     const n = Number(calcAmount); if (!Number.isFinite(n)) { setCalcResult('数量无效'); return }
@@ -1057,7 +1066,7 @@ function TimestampTool(): React.JSX.Element {
               <XTextarea className={cn(taCls, 'min-h-0 flex-1')} value={ts} onChange={(e) => setTs(e.target.value)} placeholder={'试试输入：\n· 1749722690（时间戳）\n· 2025-06-12 18:06:25\n· now / today / yesterday\n· 2025/06/12\n· Jun 12, 2025'} />
             </div>
             <div className="flex shrink-0 flex-col gap-2">
-              <Button size="sm" onClick={() => setParseNonce((n) => n + 1)}>解析</Button>
+              <Button size="sm" onClick={() => { trackHandy('timestamp_parse'); setParseNonce((n) => n + 1) }}>解析</Button>
               <Button size="sm" variant="outline" onClick={() => setTs('')}>清空</Button>
             </div>
           </div>
@@ -1188,27 +1197,27 @@ function IdTool(): React.JSX.Element {
         <div className="flex flex-wrap items-center gap-2">
           {numRow('生成数量', uuidCount, setUuidCount)}
           <Select value={uuidFmt} onValueChange={setUuidFmt}><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="standard">标准（带连字符）</SelectItem><SelectItem value="nohyphen">无连字符</SelectItem><SelectItem value="upper">大写</SelectItem><SelectItem value="braces">带大括号</SelectItem></SelectContent></Select>
-          <Button size="sm" onClick={genUuid}>生成</Button>
+          <Button size="sm" onClick={() => { trackHandy('id_uuid_generate'); genUuid() }}>生成</Button>
         </div><OutLines lines={uuids} />
         <HistoryList title="UUID 历史" items={uuidHistory} onDelete={(i) => setUuidHistRaw(JSON.stringify(uuidHistory.filter((_, x) => x !== i)))} onClear={() => setUuidHistRaw('[]')} />
       </section>
       <section className="space-y-2">
         <div className="text-sm font-semibold">雪花 ID (Snowflake) 生成器</div>
-        <div className="flex flex-wrap items-center gap-2">{numRow('机器ID', worker, setWorker)}{numRow('数据中心', dc, setDc)}{numRow('数量', snowCount, setSnowCount)}<Button size="sm" onClick={genSnow}>生成</Button></div>
+        <div className="flex flex-wrap items-center gap-2">{numRow('机器ID', worker, setWorker)}{numRow('数据中心', dc, setDc)}{numRow('数量', snowCount, setSnowCount)}<Button size="sm" onClick={() => { trackHandy('id_snowflake_generate'); genSnow() }}>生成</Button></div>
         <OutLines lines={snows} />
         <HistoryList title="雪花历史" items={snowHistory} onDelete={(i) => setSnowHistRaw(JSON.stringify(snowHistory.filter((_, x) => x !== i)))} onClear={() => setSnowHistRaw('[]')} />
-        <div className="flex gap-2"><XInput className="max-w-sm font-mono text-xs" value={snowInput} onChange={(e) => setSnowInput(e.target.value)} placeholder="输入雪花ID进行解析" /><Button size="sm" variant="secondary" onClick={parseSnow}>解析</Button></div>
+        <div className="flex gap-2"><XInput className="max-w-sm font-mono text-xs" value={snowInput} onChange={(e) => setSnowInput(e.target.value)} placeholder="输入雪花ID进行解析" /><Button size="sm" variant="secondary" onClick={() => { trackHandy('id_snowflake_parse'); parseSnow() }}>解析</Button></div>
         {snowParsed && <div className="text-xs text-muted-foreground">{snowParsed}</div>}
       </section>
       <section className="space-y-2">
         <div className="text-sm font-semibold">NanoID 生成器</div>
-        <div className="flex flex-wrap items-center gap-2">{numRow('长度', nanoLen, setNanoLen)}{numRow('数量', nanoCount, setNanoCount)}<Button size="sm" onClick={() => { const list = Array.from({ length: clampCount(nanoCount) }, () => randFrom('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-', Math.min(64, Math.max(4, Number(nanoLen) || 21)))); setNanos(list); setNanoHistRaw(JSON.stringify([...list, ...nanoHistory].slice(0, 100))) }}>生成</Button></div>
+        <div className="flex flex-wrap items-center gap-2">{numRow('长度', nanoLen, setNanoLen)}{numRow('数量', nanoCount, setNanoCount)}<Button size="sm" onClick={() => { trackHandy('id_nanoid_generate'); const list = Array.from({ length: clampCount(nanoCount) }, () => randFrom('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-', Math.min(64, Math.max(4, Number(nanoLen) || 21)))); setNanos(list); setNanoHistRaw(JSON.stringify([...list, ...nanoHistory].slice(0, 100))) }}>生成</Button></div>
         <OutLines lines={nanos} />
         <HistoryList title="NanoID 历史" items={nanoHistory} onDelete={(i) => setNanoHistRaw(JSON.stringify(nanoHistory.filter((_, x) => x !== i)))} onClear={() => setNanoHistRaw('[]')} />
       </section>
       <section className="space-y-2">
         <div className="text-sm font-semibold">ULID 生成器 <span className="text-xs font-normal text-muted-foreground">26 位 Crockford Base32，按毫秒时间有序</span></div>
-        <div className="flex flex-wrap items-center gap-2">{numRow('数量', ulidCount, setUlidCount)}<Button size="sm" onClick={() => { const list = Array.from({ length: clampCount(ulidCount) }, genUlid); setUlids(list); setUlidHistRaw(JSON.stringify([...list, ...ulidHistory].slice(0, 100))) }}>生成</Button></div>
+        <div className="flex flex-wrap items-center gap-2">{numRow('数量', ulidCount, setUlidCount)}<Button size="sm" onClick={() => { trackHandy('id_ulid_generate'); const list = Array.from({ length: clampCount(ulidCount) }, genUlid); setUlids(list); setUlidHistRaw(JSON.stringify([...list, ...ulidHistory].slice(0, 100))) }}>生成</Button></div>
         <OutLines lines={ulids} />
         <HistoryList title="ULID 历史" items={ulidHistory} onDelete={(i) => setUlidHistRaw(JSON.stringify(ulidHistory.filter((_, x) => x !== i)))} onClear={() => setUlidHistRaw('[]')} />
       </section>
@@ -1253,10 +1262,12 @@ function TomlYamlTool(): React.JSX.Element {
   const [err, setErr] = useState('')
   const conv = DATA_CONVERSIONS.find((c) => c.id === mode) ?? DATA_CONVERSIONS[0]
   const convert = (): void => {
+    trackHandy('datafmt_convert', { mode: conv.id })
     try { setOutput(formatByFmt(conv.to, parseByFmt(conv.from, input))); setErr('') }
     catch (e) { setOutput(''); setErr(e instanceof Error ? e.message : String(e)) }
   }
   const swap = (): void => {
+    trackHandy('datafmt_swap', { mode: conv.id })
     const rev = DATA_CONVERSIONS.find((c) => c.from === conv.to && c.to === conv.from)
     if (rev) setMode(rev.id)
     if (output) { setInput(output); setOutput('') }
@@ -1324,6 +1335,11 @@ export function HandyToolsPage(): React.JSX.Element {
   const tool = TOOLS.find((t) => t.id === active) ?? TOOLS[0]
   const activeIdx = Math.max(0, TOOLS.findIndex((t) => t.id === active))
   const toggle = (): void => setCollapsed(isCollapsed ? '' : '1')
+  const selectTool = (t: (typeof TOOLS)[number]): void => {
+    if (t.id === active) return
+    captureEvent('handy tool used', { tool_id: t.id, tool_label: t.label })
+    setActive(t.id)
+  }
   return (
     <div className="flex h-full flex-col gap-4 p-6">
       <h1 className="flex flex-shrink-0 items-center gap-3 text-2xl font-bold">
@@ -1341,7 +1357,7 @@ export function HandyToolsPage(): React.JSX.Element {
             {/* 高亮块：p-1(4) + 头行(28+4) + gap(2) = 38 起步，步进 32+2 */}
             <div aria-hidden className={cn('pointer-events-none absolute left-1 right-1 h-8 rounded', NAV_HIGHLIGHT_CLS)} style={{ top: 0, transform: `translateY(${38 + activeIdx * 34}px)`, transition: `transform ${NAV_HIGHLIGHT_MS}ms ${NAV_HIGHLIGHT_EASE}`, willChange: 'transform' }} />
             {TOOLS.map((t) => (
-              <button key={t.id} type="button" onClick={() => setActive(t.id)} className={cn('relative flex items-center gap-2 rounded px-2 py-2 text-left text-xs transition-colors duration-300 hover:bg-muted/40', active === t.id && 'font-medium text-primary')}>
+              <button key={t.id} type="button" onClick={() => selectTool(t)} className={cn('relative flex items-center gap-2 rounded px-2 py-2 text-left text-xs transition-colors duration-300 hover:bg-muted/40', active === t.id && 'font-medium text-primary')}>
                 <t.icon className="h-4 w-4 shrink-0" />{t.label}
               </button>
             ))}
@@ -1352,7 +1368,7 @@ export function HandyToolsPage(): React.JSX.Element {
             <div aria-hidden className={cn('pointer-events-none absolute left-1/2 h-8 w-8 rounded', NAV_HIGHLIGHT_CLS)} style={{ top: 0, transform: `translate(-50%, ${44 + activeIdx * 36}px)`, transition: `transform ${NAV_HIGHLIGHT_MS}ms ${NAV_HIGHLIGHT_EASE}`, willChange: 'transform' }} />
             {/* ponytail: ghost 的 hover:bg-accent 不透明会盖死滑块，故降为 /40 且选中时悬停不夺色 */}
             {TOOLS.map((t) => (
-              <Button key={t.id} type="button" size="icon" variant="ghost" className={cn('relative h-8 w-8 transition-colors duration-300 hover:bg-accent/40', active === t.id && 'text-primary hover:text-primary')} title={t.label} onClick={() => setActive(t.id)}><t.icon className="h-4 w-4" /></Button>
+              <Button key={t.id} type="button" size="icon" variant="ghost" className={cn('relative h-8 w-8 transition-colors duration-300 hover:bg-accent/40', active === t.id && 'text-primary hover:text-primary')} title={t.label} onClick={() => selectTool(t)}><t.icon className="h-4 w-4" /></Button>
             ))}
           </div>
         </aside>

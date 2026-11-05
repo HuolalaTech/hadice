@@ -1,5 +1,5 @@
 import posthog from 'posthog-js'
-import { SetPosthogDistinctId } from '../../bindings/Hadice/backend/appservice'
+import { GetAppVersion, SetPosthogDistinctId } from '../../bindings/Hadice/backend/appservice'
 
 const DISTINCT_ID_KEY = '__posthog_distinct_id__'
 
@@ -32,6 +32,15 @@ export async function initPostHog(): Promise<void> {
       maskTextClass: 'ph-mask',
     },
   })
+
+  try {
+    const version = await GetAppVersion()
+    if (version) {
+      posthog.register({ current_version: version })
+    }
+  } catch (err) {
+    console.warn('[PostHog] Failed to register current_version:', err)
+  }
 
   try {
     await SetPosthogDistinctId(distinctId)

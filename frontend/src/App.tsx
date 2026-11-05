@@ -22,6 +22,7 @@ import {
 } from '@/store/deviceStore'
 import { readPreferredDeviceKeyFromSearch } from '@/lib/device-selection'
 import { captureEvent } from '@/lib/posthog'
+import { getMenuLabel } from '@/constants/menu'
 import { useThemeStore } from '@/store/themeStore'
 import {
   DeviceOverviewPage,
@@ -296,6 +297,8 @@ function App(): React.JSX.Element {
   useEffect(() => {
     captureEvent('page viewed', {
       page: activeMenu,
+      menu_id: activeMenu,
+      menu_label: getMenuLabel(activeMenu),
       from_page: prevPageRef.current,
       is_standalone: standalone,
     })

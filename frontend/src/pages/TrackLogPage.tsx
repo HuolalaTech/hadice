@@ -38,6 +38,7 @@ import { useThemeStore } from '@/store/themeStore'
 import { useTrackLogFavoriteStore } from '@/store/trackLogFavoriteStore'
 import { useTrackLogStore } from '@/store/trackLogStore'
 import { cn } from '@/lib/utils'
+import { captureEvent } from '@/lib/posthog'
 
 const FILTER_TAGS_KEY = 'track-log-filter-tags'
 const FILTER_HISTORY_KEY = 'track-log-filter-history'
@@ -745,6 +746,7 @@ function TrackLogPageInner(): React.JSX.Element {
       if (status.running) {
         // 停的是服务端已绑定设备，不跟 UI 当前选中走（避免切机后停错）
         await stop(boundDeviceId || selectedDevice.connectKey)
+        captureEvent('track log stopped', { port: status.port })
         toast.success('已停止埋点监听')
       } else {
         const port = normalizePortInput(portDraft)
@@ -755,6 +757,7 @@ function TrackLogPageInner(): React.JSX.Element {
         savePort(port)
         setPortDraft(String(port))
         const next = await start(selectedDevice.connectKey, port)
+        captureEvent('track log started', { port, has_warning: Boolean(next.error) })
         if (next.error) toast.warning(next.error)
         else
           toast.success(`已监听 ${next.hostHint || `127.0.0.1:${port}`}`, {
@@ -775,6 +778,10 @@ function TrackLogPageInner(): React.JSX.Element {
     try {
       // 已监听时后端忽略 port，沿用当前监听端口
       const next = await start(selectedDevice.connectKey, status.port || resolvedPort)
+      captureEvent('track log rebound', {
+        port: status.port || resolvedPort,
+        has_warning: Boolean(next.error),
+      })
       if (next.error) toast.warning(next.error)
       else
         toast.success(`已改绑到 ${selectedDevice.connectKey}`, {
