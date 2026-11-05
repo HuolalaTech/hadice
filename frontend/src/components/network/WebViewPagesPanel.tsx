@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Copy, ExternalLink, Globe, Loader2, Pause, Play, RefreshCw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -6,15 +6,27 @@ import { Input } from '@/components/ui/input'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { formatDateTime } from '@/lib/format'
 import { openSystemBrowser, openWebPeek } from '@/lib/open-web-peek'
+import {
+  WEBVIEW_PAGES_ABS_MAX,
+  WEBVIEW_PAGES_ABS_MIN,
+  WEBVIEW_PAGES_DEFAULT_MAX,
+  clampWebViewPagesMax,
+  clearWebViewPagesHistory,
+  displayWebViewTitle,
+  loadWebViewPagesHistory,
+  loadWebViewPagesMax,
+  mergeWebViewHistory,
+  saveWebViewPagesHistory,
+  saveWebViewPagesMax,
+  webViewHistoryUnchanged,
+  webViewPageKey,
+  type WebViewPageRow
+} from '@/lib/webview-pages-history'
 import type { HarmonyWebViewPage } from '@/types/hdc'
 
 export interface WebViewPagesTarget {
   pid: number
   packageName: string
-}
-
-interface WebViewPageRow extends HarmonyWebViewPage {
-  seenAt: number
 }
 
 interface WebViewPagesPanelProps {
@@ -26,17 +38,6 @@ interface WebViewPagesPanelProps {
 
 const POLL_MS = 2000
 
-function mergePages(prev: WebViewPageRow[], next: HarmonyWebViewPage[], now: number): WebViewPageRow[] {
-  const prevById = new Map(prev.map((page) => [page.id, page]))
-  return next.map((page) => {
-    const old = prevById.get(page.id)
-    return {
-      ...page,
-      seenAt: old?.seenAt ?? now
-    }
-  })
-}
-
 export function WebViewPagesPanel({
   deviceId,
   deviceLabel,
@@ -45,57 +46,109 @@ export function WebViewPagesPanel({
 }: WebViewPagesPanelProps): React.JSX.Element {
   const [pages, setPages] = useState<WebViewPageRow[]>([])
   const [filter, setFilter] = useState('')
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  /** 按网址 key 选中，避免 CDP id 轮询变化导致跳动 */
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [autoRefresh, setAutoRefresh] = useState(true)
+  const [maxRecords, setMaxRecords] = useState(() => loadWebViewPagesMax())
+  const [maxInput, setMaxInput] = useState(() => String(loadWebViewPagesMax()))
 
   const packageName = app?.packageName || ''
   const pid = app?.pid || 0
   const sourceDevice = deviceLabel || deviceId
 
+  const maxRecordsRef = useRef(maxRecords)
+  maxRecordsRef.current = maxRecords
+  const listPagesRef = useRef(listPages)
+  listPagesRef.current = listPages
+
   useEffect(() => {
+    setPages((prev) => {
+      if (prev.length <= maxRecords) return prev
+      const trimmed = prev.slice(0, maxRecords)
+      if (deviceId && packageName) {
+        saveWebViewPagesHistory(deviceId, packageName, trimmed, maxRecords)
+      }
+      return trimmed
+    })
+  }, [deviceId, maxRecords, packageName])
+
+  // 切设备/包名：从本地缓存恢复（pid 变不丢；仅用户清空才删）
+  useEffect(() => {
+    if (!deviceId || !packageName) {
+      setPages([])
+      setSelectedKey(null)
+      setError('')
+      return
+    }
+    const cached = loadWebViewPagesHistory(deviceId, packageName, maxRecordsRef.current)
+    setPages(cached)
+    setSelectedKey(cached[0] ? webViewPageKey(cached[0]) : null)
+    setError('')
+  }, [deviceId, packageName])
+
+  function persistAndSetPages(
+    updater: (prev: WebViewPageRow[]) => WebViewPageRow[],
+    onMerged?: (merged: WebViewPageRow[], prev: WebViewPageRow[]) => void
+  ): void {
+    setPages((prev) => {
+      const merged = updater(prev)
+      if (webViewHistoryUnchanged(prev, merged)) return prev
+      onMerged?.(merged, prev)
+      if (deviceId && packageName) {
+        saveWebViewPagesHistory(deviceId, packageName, merged, maxRecordsRef.current)
+      }
+      return merged
+    })
+  }
+
+  // 单一轮询：依赖原始字段 + autoRefresh；listPages/max 走 ref，避免无谓重启
+  useEffect(() => {
+    if (!deviceId || pid <= 0 || !packageName) return
+
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | undefined
 
-    async function poll(): Promise<void> {
-      if (!deviceId || !app || pid <= 0) {
-        if (!cancelled) {
-          setPages([])
-          setSelectedId(null)
-          setError('')
-          setLoading(false)
-        }
-        return
-      }
-
-      if (!cancelled) setLoading(true)
+    async function poll(showLoading: boolean): Promise<void> {
+      if (showLoading) setLoading(true)
       try {
-        const next = await listPages(deviceId, pid, packageName)
+        const next = await listPagesRef.current(deviceId, pid, packageName)
         if (cancelled) return
         const now = Date.now()
-        setPages((prev) => mergePages(prev, next, now))
+        persistAndSetPages(
+          (prev) => mergeWebViewHistory(prev, next, now, maxRecordsRef.current),
+          (merged) => {
+            setSelectedKey((current) => {
+              if (current && merged.some((page) => webViewPageKey(page) === current)) {
+                return current
+              }
+              const firstLive = next[0] ? webViewPageKey(next[0]) : null
+              return firstLive || (merged[0] ? webViewPageKey(merged[0]) : null)
+            })
+          }
+        )
         setError('')
-        setSelectedId((current) => {
-          if (current && next.some((page) => page.id === current)) return current
-          return next[0]?.id || null
-        })
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : String(err))
         }
       } finally {
         if (!cancelled) setLoading(false)
-        if (!cancelled && autoRefresh) timer = setTimeout(poll, POLL_MS)
+        if (!cancelled && autoRefresh) {
+          timer = setTimeout(() => {
+            void poll(false)
+          }, POLL_MS)
+        }
       }
     }
 
-    void poll()
+    void poll(true)
     return () => {
       cancelled = true
       if (timer) clearTimeout(timer)
     }
-  }, [app, autoRefresh, deviceId, listPages, packageName, pid])
+  }, [autoRefresh, deviceId, packageName, pid])
 
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase()
@@ -107,7 +160,17 @@ export function WebViewPagesPanel({
     )
   }, [filter, pages, sourceDevice])
 
-  const selected = filtered.find((page) => page.id === selectedId) || null
+  const selected =
+    filtered.find((page) => webViewPageKey(page) === selectedKey) || null
+
+  function commitMaxRecords(raw: string): void {
+    const parsed = Number(raw)
+    const next = saveWebViewPagesMax(
+      Number.isFinite(parsed) ? parsed : WEBVIEW_PAGES_DEFAULT_MAX
+    )
+    setMaxRecords(next)
+    setMaxInput(String(next))
+  }
 
   async function handleCopy(): Promise<void> {
     if (!selected?.url) return
@@ -127,10 +190,26 @@ export function WebViewPagesPanel({
   }
 
   function handleClear(): void {
+    clearWebViewPagesHistory(deviceId, packageName)
     setPages([])
-    setSelectedId(null)
+    setSelectedKey(null)
     setError('')
-    toast.success('已清空网页列表')
+    toast.success('已清空网页记录')
+  }
+
+  function applyScan(next: HarmonyWebViewPage[]): void {
+    const now = Date.now()
+    persistAndSetPages(
+      (prev) => mergeWebViewHistory(prev, next, now, maxRecordsRef.current),
+      (merged) => {
+        setSelectedKey((current) => {
+          if (current && merged.some((page) => webViewPageKey(page) === current)) return current
+          const firstLive = next[0] ? webViewPageKey(next[0]) : null
+          return firstLive || (merged[0] ? webViewPageKey(merged[0]) : null)
+        })
+      }
+    )
+    setError('')
   }
 
   if (!app) {
@@ -151,7 +230,7 @@ export function WebViewPagesPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 p-3">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Input
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
@@ -159,8 +238,27 @@ export function WebViewPagesPanel({
           className="h-8 max-w-xs"
         />
         <span className="truncate text-xs text-muted-foreground font-mono">{packageName}</span>
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span>保留</span>
+          <Input
+            type="number"
+            min={WEBVIEW_PAGES_ABS_MIN}
+            max={WEBVIEW_PAGES_ABS_MAX}
+            value={maxInput}
+            onChange={(event) => setMaxInput(event.target.value)}
+            onBlur={() => commitMaxRecords(maxInput)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.currentTarget.blur()
+              }
+            }}
+            className="h-8 w-16 px-2 text-center font-mono"
+            title={`最近网址条数，默认 ${WEBVIEW_PAGES_DEFAULT_MAX}，最大 ${WEBVIEW_PAGES_ABS_MAX}`}
+          />
+          <span>条</span>
+        </div>
         <div className="ml-auto flex items-center gap-1">
-          {loading && autoRefresh && (
+          {loading && pages.length === 0 && (
             <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
           )}
           <Button
@@ -179,7 +277,7 @@ export function WebViewPagesPanel({
             className="h-8 w-8 p-0"
             disabled={pages.length === 0}
             onClick={handleClear}
-            title="一键清空"
+            title="一键清空记录"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
@@ -221,11 +319,7 @@ export function WebViewPagesPanel({
             onClick={() => {
               setLoading(true)
               void listPages(deviceId, pid, packageName)
-                .then((next) => {
-                  const now = Date.now()
-                  setPages((prev) => mergePages(prev, next, now))
-                  setError('')
-                })
+                .then((next) => applyScan(next))
                 .catch((err) => setError(err instanceof Error ? err.message : String(err)))
                 .finally(() => setLoading(false))
             }}
@@ -260,23 +354,19 @@ export function WebViewPagesPanel({
               </tr>
             ) : (
               filtered.map((page) => {
-                const active = page.id === selectedId
+                const key = webViewPageKey(page)
+                const active = key === selectedKey
                 return (
                   <tr
-                    key={page.id}
+                    key={key}
                     className={`border-b cursor-pointer hover:bg-muted/50 ${active ? 'bg-primary/10' : ''}`}
-                    onClick={() => setSelectedId(page.id)}
+                    onClick={() => setSelectedKey(key)}
                   >
                     <td className="px-3 py-2 align-top">
-                      <div className="flex items-start gap-2 min-w-0">
-                        {page.faviconUrl ? (
-                          <img src={page.faviconUrl} alt="" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                        ) : null}
-                        <div className="min-w-0">
-                          <div className="break-all">{page.title || '(无标题)'}</div>
-                          <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-                            {formatDateTime(page.seenAt)}
-                          </div>
+                      <div className="min-w-0">
+                        <div className="break-all">{displayWebViewTitle(page.title, page.url)}</div>
+                        <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                          {formatDateTime(page.seenAt)}
                         </div>
                       </div>
                     </td>
@@ -296,8 +386,9 @@ export function WebViewPagesPanel({
       </div>
 
       <div className="text-[11px] text-muted-foreground">
-        {filtered.length} 个页面 ·{' '}
+        记录 {pages.length}/{clampWebViewPagesMax(maxRecords)} 条 ·{' '}
         {autoRefresh ? `每 ${POLL_MS / 1000}s 自动刷新` : '已停止自动刷新'}
+        {filter.trim() ? ` · 过滤后 ${filtered.length}` : ''}
       </div>
     </div>
   )

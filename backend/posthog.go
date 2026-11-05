@@ -96,6 +96,7 @@ func CapturePosthogEvent(event string, properties map[string]interface{}) {
 	}
 	props["distinct_id"] = posthogDistinctID
 	props["$lib"] = "posthog-go-custom"
+	props["current_version"] = generatedAppVersion
 
 	evt := posthogEvent{
 		Event:      event,

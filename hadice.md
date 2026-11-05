@@ -11,14 +11,14 @@ go install github.com/wailsapp/wails/v3/cmd/wails3@latest
 # Android Agent：本机 Android Studio SDK + NDK、JDK（脚本会尽量自动找）
 # 跨平台打 Windows：建议安装 Docker Desktop，并执行一次 task setup:docker
 
-# 2. 可选私密配置
-cp .env.ci.example .env.ci
+# 2. 私密配置（打包 / 编译前必填；不入库）
+cp .env.ci.example .env.ci   # 填写分析 / 更新检查 / 文档链接等
 
 # 3. 先选动作（无参数不会自动热启动）
 ./hadice.sh          # 交互菜单：选 hot / app / release / build / open / help
 ./hadice.sh hot      # 直接热启动
-./hadice.sh app      # 直接编译本机 macOS App
-./hadice.sh release  # 发布包（校验 .env.ci → 烤入 → 全平台打包）
+./hadice.sh app      # 打包本机 macOS（统一烤入 .env.ci）
+./hadice.sh release  # 同 app all
 ./hadice.sh help     # 完整说明
 ```
 
@@ -26,12 +26,16 @@ cp .env.ci.example .env.ci
 
 ## 编译 App（多架构）
 
+`app` / `build` / `release` **统一**：校验 `.env.ci` → `task gen:cienv` → 再编译/打包；**不再区分**「发布包 / 普通包」。`.env.ci` 不会复制进安装包。缺文件或键全空直接失败。
+
 ```bash
 ./hadice.sh app              # 当前本机架构 → .app + DMG
 ./hadice.sh app arm64        # macOS Apple Silicon
 ./hadice.sh app amd64        # macOS Intel
 ./hadice.sh app windows      # Windows amd64：安装包 EXE + 免安装 ZIP
 ./hadice.sh app all          # 全部：macOS arm64 + amd64 + Windows
+./hadice.sh release          # 等价于 app all
+./hadice.sh release arm64    # 等价于 app arm64
 ./hadice.sh open [arch]      # 打开 macOS 产物
 ./hadice.sh build [target]   # 只编二进制，不打安装包
 ./hadice.sh dist             # 列出 dist 产物
@@ -49,19 +53,7 @@ cp .env.ci.example .env.ci
 
 底层对应 Task：`package:macos:arm64` / `package:macos:amd64` / `package:windows:amd64` / `package:cross`。
 
-单架构打包约 3–5 分钟（含 `build:agent`）；`app all` 更久。
-
-## 发布包编译
-
-用于正式发版：把本地 `.env.ci`（分析 / 更新检查 / 文档链接）烤进二进制，**不会**把 `.env.ci` 文件打进安装包。
-
-```bash
-cp .env.ci.example .env.ci   # 首次：填写密钥
-./hadice.sh release          # 默认 package:cross（macOS 双架构 + Windows）
-./hadice.sh release arm64    # 只打某一目标，同 app 的 target
-```
-
-与 `app` 的差别：缺文件或键全空会失败；先跑 `task gen:cienv`。编完若要推开源分支，把 `backend/cienv_generated.go` 恢复为空默认再提交，且勿 `git add .env.ci`。全量约 10–20 分钟（含 agent + Windows Docker）。
+单架构打包约 3–5 分钟（含 `build:agent`）；`app all` 约 10–20 分钟。编完勿提交非空 `backend/cienv_generated.go` 与 `.env.ci`。
 
 ## 命令一览
 
@@ -70,9 +62,9 @@ cp .env.ci.example .env.ci   # 首次：填写密钥
 | `./hadice.sh` / `menu` | 交互菜单（默认；不自动启动） |
 | `./hadice.sh help` | 打印本说明 |
 | `./hadice.sh hot` / `dev` / `start` | 热启动 `task dev` |
-| `./hadice.sh app [target]` | 打包；target=`arm64`/`amd64`/`windows`/`all` |
-| `./hadice.sh release [target]` | 发布包：校验 `.env.ci` → `gen:cienv` → 打包（默认 `all`） |
-| `./hadice.sh build [target]` | 仅编译 |
+| `./hadice.sh app [target]` | 烤入 `.env.ci` 后打包；target=`arm64`/`amd64`/`windows`/`all` |
+| `./hadice.sh release [target]` | 同 `app`（默认 `all`） |
+| `./hadice.sh build [target]` | 烤入 `.env.ci` 后仅编译 |
 | `./hadice.sh open [arch]` | 打开 macOS `.app` |
 | `./hadice.sh dist` | 列出产物 |
 

@@ -97,10 +97,11 @@ print_artifacts() {
   fi
 }
 
-# 发布包：校验本地 .env.ci（只报已填数量，不打印密钥）
-require_release_env() {
+# 任意打包/编译前：校验 .env.ci 并烤入 cienv（不再区分 release / 普通包）
+ensure_cienv() {
+  need_cmd task
   if [[ ! -f "${ROOT_DIR}/.env.ci" ]]; then
-    echo "发布包需要根目录 .env.ci（私密配置，不入库）" >&2
+    echo "打包需要根目录 .env.ci（私密配置，不入库）" >&2
     echo "  cp .env.ci.example .env.ci 并填写后重试" >&2
     exit 1
   fi
@@ -121,10 +122,12 @@ require_release_env() {
     ' "${ROOT_DIR}/.env.ci"
   )"
   if [[ "${filled}" -eq 0 ]]; then
-    echo "错误: .env.ci 键全空，发布包不会嵌入更新检查 / 分析等配置" >&2
+    echo "错误: .env.ci 键全空，不会嵌入更新检查 / 分析等配置" >&2
     exit 1
   fi
   echo "==> .env.ci: ${filled} 个键已填（值不打印）"
+  echo "==> 烤入私密配置: task gen:cienv（.env.ci 本身不进包）"
+  task gen:cienv
 }
 
 cmd_help() {
@@ -137,9 +140,9 @@ cmd_help() {
     echo "缺少 hadice.md。常用命令:"
     echo "  ./hadice.sh          # 交互菜单（不自动启动）"
     echo "  ./hadice.sh hot      # 热启动"
-    echo "  ./hadice.sh app      # 编译本机 macOS App + DMG"
+    echo "  ./hadice.sh app      # 打包本机 macOS（先烤入 .env.ci）"
     echo "  ./hadice.sh app all  # macOS arm64+amd64 + Windows"
-    echo "  ./hadice.sh release  # 发布包：校验 .env.ci → 烤入 → 打包（默认 all）"
+    echo "  ./hadice.sh release  # 同 app all（统一用 .env.ci）"
     echo "  ./hadice.sh open     # 打开产物"
   fi
   echo ""
@@ -155,13 +158,13 @@ cmd_menu() {
   echo "本机架构: ${host}"
   echo "----------------------------------------"
   echo "  1) hot         热启动开发（Vite / Wails 热重载）"
-  echo "  2) app         打包本机 macOS（${host}）App + DMG"
+  echo "  2) app         打包本机 macOS（${host}）App + DMG（用 .env.ci）"
   echo "  3) app-arm64   打包 macOS Apple Silicon"
   echo "  4) app-amd64   打包 macOS Intel"
   echo "  5) app-windows 打包 Windows amd64（安装包+ZIP，需 Docker）"
   echo "  6) app-all     打包全部：macOS arm64/amd64 + Windows"
-  echo "  7) release     发布包编译（校验 .env.ci → gen:cienv → 打包，默认 all）"
-  echo "  8) build       仅编译本机二进制（不打安装包）"
+  echo "  7) release     同 app-all（统一 .env.ci，不再区分包）"
+  echo "  8) build       仅编译本机二进制（同样烤入 .env.ci）"
   echo "  9) open        打开本机架构的 Hadice.app"
   echo "  d) dist        列出 dist 产物"
   echo "  h) help        查看完整说明"
@@ -214,8 +217,8 @@ cmd_dev() {
 cmd_build() {
   setup_android_env
   need_cmd go
-  need_cmd task
   need_cmd npm
+  ensure_cienv
   local target
   target="$(normalize_target "${1:-}")"
   case "$target" in
@@ -237,13 +240,15 @@ cmd_build() {
       ;;
   esac
   print_artifacts
+  echo ""
+  echo "提示: 勿提交非空 backend/cienv_generated.go 与 .env.ci"
 }
 
 cmd_app() {
   setup_android_env
   need_cmd go
-  need_cmd task
   need_cmd npm
+  ensure_cienv
   local target
   target="$(normalize_target "${1:-}")"
   case "$target" in
@@ -272,6 +277,8 @@ cmd_app() {
   echo ""
   echo "完成。"
   print_artifacts
+  echo ""
+  echo "提示: 勿提交非空 backend/cienv_generated.go 与 .env.ci"
   if [[ "$target" == macos-arm64 || "$target" == macos-amd64 ]]; then
     local arch="${target#macos-}"
     echo ""
@@ -279,20 +286,11 @@ cmd_app() {
   fi
 }
 
-# 发布包：强制用本地 .env.ci 烤入 cienv_generated.go，再打安装包（默认全平台）
-# 与 app 的区别：缺/空 .env.ci 直接失败；编完提醒勿提交非空 cienv_generated.go
+# release = app all（或指定 target）；与 app 同一套 .env.ci 流程，不再区分包类型
 cmd_release() {
-  require_release_env
-  need_cmd task
-  echo "==> 烤入私密配置: task gen:cienv（.env.ci 本身不进包）"
-  task gen:cienv
   local target="${1:-all}"
-  echo "==> 发布包编译: target=${target}"
+  echo "==> release → 同 app（统一 .env.ci）target=${target}"
   cmd_app "${target}"
-  echo ""
-  echo "发布后（开源树）请把 backend/cienv_generated.go 恢复为空默认再提交："
-  echo "  mv .env.ci .env.ci.bak && task gen:cienv && mv .env.ci.bak .env.ci"
-  echo "  （或手动清空 generated 后 gen:cienv；切勿 git add .env.ci）"
 }
 
 cmd_open() {

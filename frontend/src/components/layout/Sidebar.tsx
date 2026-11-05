@@ -10,6 +10,7 @@ import {
   TooltipTrigger
 } from '@/components/ui/tooltip'
 import { menuItems } from '@/constants/menu'
+import { captureEvent } from '@/lib/posthog'
 import { APP_LAYOUT_ENABLED } from '@/modules/appLayout/enabled'
 import { usePanelStore } from '@/store/panelStore'
 import { useDeviceStore } from '@/store/deviceStore'
@@ -126,7 +127,15 @@ export function Sidebar({ activeMenu, onMenuChange }: SidebarProps): React.JSX.E
               const isActive = activeMenu === item.id
               const button = (
                 <button
-                  onClick={() => onMenuChange(item.id)}
+                  onClick={() => {
+                    if (isActive) return
+                    captureEvent('menu used', {
+                      menu_id: item.id,
+                      menu_label: item.label,
+                      from_menu: activeMenu,
+                    })
+                    onMenuChange(item.id)
+                  }}
                   className={cn(
                     'relative w-full flex items-center rounded-lg text-sm font-medium transition-colors duration-300',
                     collapsed ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2.5',

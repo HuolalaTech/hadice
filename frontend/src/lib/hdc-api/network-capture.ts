@@ -549,7 +549,8 @@ export const networkCaptureAPI = {
         type: page?.type || '',
         url: page?.url || '',
         title: page?.title || '',
-        faviconUrl: page?.faviconUrl || '',
+        // 列表不展示/不回退抓取 favicon，避免 WKWebView 空框与额外请求
+        faviconUrl: '',
         webSocketDebuggerUrl: page?.webSocketDebuggerUrl || ''
       }))
     } catch (error) {
@@ -570,7 +571,7 @@ export const networkCaptureAPI = {
         type: page?.type || '',
         url: page?.url || '',
         title: page?.title || '',
-        faviconUrl: page?.faviconUrl || '',
+        faviconUrl: '',
         webSocketDebuggerUrl: page?.webSocketDebuggerUrl || ''
       }))
     } catch (error) {

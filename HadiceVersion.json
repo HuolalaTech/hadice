@@ -1,6 +1,6 @@
 {
-  "version": "2.3.11",
-  "releaseDate": "2026-11-4",
+  "version": "2.3.12",
+  "releaseDate": "2026-11-5",
   "downloadUrl": "https://huolalatech.github.io/hadice/download.html",
-  "releaseNotes": "发布包一键编译（校验 .env.ci 后打包）；底栏展示应用版本号\n"
+  "releaseNotes": "网页看看访问历史可配置与持久化；打包统一烤入 .env.ci；PostHog 版本/菜单与埋点·便捷工具业务上报\n"
 }
