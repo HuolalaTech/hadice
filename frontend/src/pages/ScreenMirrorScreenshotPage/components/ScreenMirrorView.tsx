@@ -51,6 +51,7 @@ export function ScreenMirrorView({
     startWidth: number
     startHeight: number
   } | null>(null)
+  // null = 跟随可用区域最大化（contain）；非 null = 用户手动调整过的逻辑高度
   const [preferredHeight, setPreferredHeight] = useState<number | null>(null)
 
   const aspectRatio = useMemo(() => {
@@ -59,6 +60,11 @@ export function ScreenMirrorView({
     }
     return 9 / 19.5
   }, [displaySize])
+
+  // 设备分辨率/折叠态变化后重新按可用区域最大化，避免沿用旧尺寸
+  useEffect(() => {
+    setPreferredHeight(null)
+  }, [displaySize?.width, displaySize?.height])
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -149,12 +155,13 @@ export function ScreenMirrorView({
         rotationQuarterTurns
       )
     : null
-  const defaultHeight = aspectRatio <= 1
-    ? DEFAULT_FRAME_SHORT_EDGE / aspectRatio
-    : DEFAULT_FRAME_SHORT_EDGE
+  // 尚无可用区域测量结果时的占位高度；有测量后默认直接拉满 maxFrameHeight
+  const fallbackHeight = aspectRatio <= 1
+    ? FALLBACK_FRAME_SHORT_EDGE / aspectRatio
+    : FALLBACK_FRAME_SHORT_EDGE
   const renderedHeight = maxFrameHeight === null
-    ? defaultHeight
-    : Math.min(preferredHeight ?? defaultHeight, maxFrameHeight)
+    ? fallbackHeight
+    : Math.min(preferredHeight ?? maxFrameHeight, maxFrameHeight)
   const logicalWidth = renderedHeight * aspectRatio
   const isSideways = rotationQuarterTurns % 2 === 1
   const stageWidth = isSideways ? renderedHeight : logicalWidth
@@ -259,15 +266,26 @@ export function ScreenMirrorView({
 
 type ResizeEdge = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
 
-const DEFAULT_FRAME_SHORT_EDGE = 400
+/** 仅在 availableSize 尚未测到时使用的占位短边 */
+const FALLBACK_FRAME_SHORT_EDGE = 400
 
+/**
+ * Height-biased contain：在可用区域内保持设备宽高比，尽量占满高度；
+ * 宽度放不下时再退回按宽度缩放。返回逻辑坐标系下的最大 frame 高度。
+ */
 function getMaximumFrameHeight(
   availableWidth: number,
   availableHeight: number,
   aspectRatio: number,
   rotationQuarterTurns: number
 ): number {
+  if (availableWidth <= 0 || availableHeight <= 0 || aspectRatio <= 0) {
+    return 0
+  }
+
   const isSideways = rotationQuarterTurns % 2 === 1
+  // 未旋转：先试高度占满 → width = height * AR；超宽则按宽度反算高度
+  // 旋转 90°/270°：舞台宽高对调，逻辑高度对应屏幕上的宽度约束
   const widthLimit = isSideways ? availableWidth : availableWidth / aspectRatio
   const heightLimit = isSideways ? availableHeight / aspectRatio : availableHeight
   return Math.max(0, Math.min(widthLimit, heightLimit))
