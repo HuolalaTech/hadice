@@ -1,6 +1,6 @@
 module Hadice
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/UserExistsError/conpty v0.1.4
@@ -9,8 +9,8 @@ require (
 	github.com/samber/lo v1.49.1
 	github.com/wailsapp/wails/v3 v3.0.0-beta.30
 	go.uber.org/zap v1.27.1
-	google.golang.org/grpc v1.80.0
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/grpc v1.85.0
+	google.golang.org/protobuf v1.36.12
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
@@ -22,10 +22,10 @@ require (
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
-	golang.org/x/net v0.56.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/text v0.39.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260120221211-b8f7ae30c516 // indirect
+	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260817212433-ac3dfec99bb1 // indirect
 )
 
 // replace github.com/wailsapp/wails/v3 v3.0.0 => /Users/haivo/go/pkg/mod
